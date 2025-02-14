@@ -8,3 +8,5 @@ output/
 cmake-build-debug/*
 cmake-build-release/*
 *.ini
+CMakeLists*
+Projects/*/CMakeLists*

@@ -4,7 +4,8 @@ add_definitions(-w)
 if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message( FATAL_ERROR "In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there. You may need to remove CMakeCache.txt." )
 endif()
-
+set(CMAKE_CXX_COMPILER g++-14)
+# set(CMAKE_C_COMPILER gcc-14)
 project(WuKong2024 CXX)
 
 message(STATUS "${CMAKE_BUILD_TYPE} Build")
@@ -15,10 +16,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS "ON")
 set(CMAKE_CXX_STANDARD 17)
 
 
-find_package (Eigen3 3.3 REQUIRED NO_MODULE)
+find_package (Eigen3 REQUIRED)
+include_directories( ${EIGEN3_INCLUDE_DIR} )
 if (APPLE)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -O0")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -O0 -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
+    set(CMAKE_CXX_FLAGS "-stdlib=libstdc++ ${CMAKE_CXX_FLAGS} -fPIC -O3 -Wno-unused-variable -Wno-unused-but-set-variable -Wsign-compare -Wreorder")
 else()
     find_package (OpenMP REQUIRED)
     if (OPENMP_FOUND)

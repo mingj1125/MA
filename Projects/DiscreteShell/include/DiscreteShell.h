@@ -56,13 +56,9 @@ public:
     T lambda, mu;
 
     Hinges hinges;
-    std::vector<TM2> Xinv;
-    VectorXT shell_rest_area;
     T thickness = 0.003; // meter
     VectorXi faces;
     std::vector<Triangle> triangles;
-    VectorXT rest_area;
-    VectorXT undeformed_area;
 
     VectorXT hinge_stiffness;
 
@@ -90,6 +86,49 @@ public:
     VectorXT xn;
     VectorXT vn;
 
+    // ============================= Stress Tensor Utilities ============================
+
+    std::vector<TM> stress_tensors;
+    std::vector<TM> cauchy_stress_tensors;
+
+    // ============================= Strain Tensor Utilities ============================
+
+    std::vector<TM> strain_tensors;
+    std::vector<TM2> space_strain_tensors; // local 2D coodinate strain without transformation
+    std::vector<TM2> optimization_homo_target_tensors; // optimization target
+
+    // ============================= Test Window Utilities ==============================
+    bool set_window = false;
+    // nodal coordinate
+    int window_x = 0;
+    int window_y = 0;
+    int window_length = 5;
+    int window_height = 5;
+    T total_window_area_undeformed = 0;
+
+    std::vector<TM> homo_stress_tensors;
+    std::vector<T> homo_stress_magnitudes;
+
+    std::vector<TM> homo_strain_tensors;
+    std::vector<T> homo_strain_magnitudes;
+
+    VectorXT weights = VectorXT::Zero(4);
+    VectorXT epsilons = VectorXT::Zero(4);
+
+    // ============================= Kernel-weighted Cut Utilities ======================
+    VectorXi cut_coloring; // coloring with cut categories
+    VectorXT kernel_coloring_prob; // coloring with kernel weights
+    VectorXT kernel_coloring_avg;
+    std::vector<TV> sample;
+    std::vector<TV> direction;
+
+    // ============================= Heterogenuous material ==============================
+    bool heterogenuous = false;
+    VectorXT nu_visualization;
+    VectorXT E_visualization;
+
+    // ============================= Quadratic triangle ===================================
+    bool quadratic = true;
     
 
 public:
@@ -404,6 +443,63 @@ public:
     void checkTotalGradientScale(bool perturb = false);
     void checkTotalHessian(bool perturb = false);
     void checkTotalHessianScale(bool perturb = false);
+
+    // ============================= Stress Tensor Utilities ============================
+    Matrix<T, 3, 2> computeDeformationGradientwrt2DXSpace(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
+    Matrix<T, 2, 3> computeBarycentricJacobian(const TV X1, const TV X2, const TV X3);
+    Matrix<T, 2, 2> computeCauchyStrainwrt2dXSpace(Matrix<T, 3, 2> F);
+    void computeStrainAndStressPerElement();
+    void computeHomogenization();
+    void computeEnergyComparison();
+
+    // ============================= Test Window Utilities ==============================
+    Matrix<T, 3, 3> computeHomogenisedStressTensorinWindow();
+    T computeWindowAreaRatio();
+    Matrix<T, 3, 3> computeHomogenisedStrainTensorinWindow();
+    Matrix<T, 3, 3> computeHomogenisedTargetTensorinWindow();
+    bool TriangleinsideWindow(int start_x, int start_y, int length, int height, int face_idx);
+    // compute objective Obj = w1*(epsilon_xx - ep_t_xx)^2 + w2*(epsilon_xy - ep_t_xy)^2 + w3*(epsilon_yy - ep_t_yy)^2
+    void addEnergyforDesiredTarget(T &energy);
+    Vector<T, 9> computeGradientForDesiredTargetXX(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
+    Vector<T, 9> computeGradientForDesiredTargetXY(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
+    Vector<T, 9> computeGradientForDesiredTargetYY(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
+    Vector<T, 9> computeGradientForDesiredTargetYX(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
+    void addGradientForDesiredTarget(VectorXT& residual);
+    T computeTestWindowForces(VectorXT& forces);
+
+    // ============================= Boundary Utilities =================================
+    void setEssentialBoundaryCondition(T displacement_x, T displacement_y);
+
+    // ============================= Kernel-weighted Cut Utilities ======================
+    void setProbingLineDirections(unsigned int num_directions);
+    Matrix<T, 3, 3> findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions);
+    Matrix<T, 2, 2> findBestStrainTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions);
+    Matrix<T, 3, 3> findBestStressTensorviaAveraging(const TV sample_loc);
+    Matrix<T, 3, 3> findBestStrainTensorviaAveraging(const TV sample_loc);
+    Vector<T, 3> computeWeightedStress(const TV sample_loc, TV direction);
+    T computeWeightedStrain(const TV sample_loc, TV direction);
+    Vector<T, 3> triangleCenterofMass(FaceVtx vertices);
+    void visualizeCuts(const std::vector<TV> sample_points, const std::vector<TV> line_directions);
+    void visualizeCut(const TV sample_point, const TV line_direction, unsigned int line_tag);
+    bool lineCutTriangle(const TV x1, const TV x2, const TV x3, const TV sample_point, const TV line_direction, TV &cut_point_coordinate);
+    Vector<T, 3> middlePointoflineCutTriangle(const TV x1, const TV x2, const TV x3, const TV cut_point_coordinate);
+    T strainInCut(const int face_idx, const TV cut_point_coordinate);
+    Vector<T, 2> solveLineIntersection(const TV sample_point, const TV line_direction, const TV v1, const TV v2);
+
+    // ============================== Isotropic Stretch =================================
+    void testIsotropicStretch();
+    void testHorizontalDirectionStretch();
+    void testVerticalDirectionStretch();
+    std::vector<Matrix<T, 3, 3>> returnStressTensors(int A);
+    std::vector<Matrix<T, 3, 3>> returnStrainTensors(int A);
+    void testSharedEdgeStress(int A, int B, int v1, int v2);
+    void testStressTensors(int A, int B);
+    T areaRatio(int A);
+    int pointInTriangle(const TV sample_loc);
+    std::vector<Vector<T, 3>> pointInDeformedTriangle();
+    Vector<T, 3> pointInDeformedTriangle(const TV sample_loc);
+
+    void setMaterialParameter(T& E, T& nu, int face_idx);
 
 public:
     DiscreteShell() 

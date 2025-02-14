@@ -7,7 +7,24 @@
 #include <Spectra/MatOp/SparseSymMatProd.h>
 
 #include "../autodiff/CST3DShell.h"
+#include "../autodiff/Quadratic2DShell.h"
 #include "../include/DiscreteShell.h"
+
+#include <cmath> // for pi in cut directions
+#include <random> // for rng in sampling for stress probing
+#include <set>
+
+void DiscreteShell::setMaterialParameter(T& E, T& nu, int face_idx){
+    // nu = 0.45;
+    nu = 0.;
+    E = 1e6;
+    // nu = (1-(face_idx%10)/10.)*nu;
+    // E = (1-(face_idx/18)/10.)*E;
+    FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+    // T x = 0.5*(undeformed_vertices.col(1).minCoeff()+undeformed_vertices.col(1).maxCoeff());
+    T x = triangleCenterofMass(undeformed_vertices)(1);
+    E = (1-x*1.5)*E;
+}
 
 bool DiscreteShell::advanceOneTimeStep()
 {
@@ -46,8 +63,19 @@ bool DiscreteShell::advanceOneStep(int step)
         std::cout << "=================== Time STEP " << step * dt << "s===================" << std::endl;
         bool finished = advanceOneTimeStep();
         updateDynamicStates();
+        computeStrainAndStressPerElement();
+        computeHomogenization();
+        TM vertices = getFaceVtxDeformed(10);
+        sample[0] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+        vertices = getFaceVtxDeformed(60);
+        sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+        visualizeCuts(sample, direction);
+        std::cout << "Found stress tensor: \n" << findBestStressTensorviaProbing(sample[0], direction) << std::endl;
+        std::cout << "Caculated stress tensor at sample point triangle: \n" << stress_tensors[10] << std::endl;
         if (step * dt > simulation_duration)
+        {
             return true;
+        }
         return false;
     }
     else
@@ -58,9 +86,43 @@ bool DiscreteShell::advanceOneStep(int step)
         residual_norms.push_back(residual_norm);
         std::cout << "[NEWTON] iter " << step << "/" 
             << max_newton_iter << ": residual_norm " 
-            << residual_norm << " tol: " << newton_tol << std::endl;
-        if (residual_norm < newton_tol || step == max_newton_iter)
-        {
+            << residual_norm << " tol: " << newton_tol << std::endl;    
+        if (residual_norm < newton_tol || step >= max_newton_iter)
+        {   
+            computeStrainAndStressPerElement();
+            computeHomogenization();
+            // TM vertices = getFaceVtxUndeformed(1288);
+            TM vertices = getFaceVtxUndeformed(60);
+            sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+            // TM E = TM::Zero();
+            // TV CoM = {-0.21, 0.185, 0};
+            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
+            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
+            // std::cout << E << std::endl;
+            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
+            // CoM = {-0.21, 0.30, 0};
+            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
+            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
+            // std::cout << E << std::endl;
+            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
+            // CoM = {-0.05, 0.26, 0};
+            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
+            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
+            // std::cout << E << std::endl;
+            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
+            // sample[0] = CoM;
+
+            // coarse mesh 
+            // testStressTensors(0, 45);
+            // testSharedEdgeStress(44, 45, 24, 35);
+            // testSharedEdgeStress(45, 42, 24, 34);
+            // testSharedEdgeStress(45, 62, 34, 35);
+
+            // refined mesh
+            // testStressTensors(0, 679);
+            // testSharedEdgeStress(677, 679, 537, 640);
+            // testSharedEdgeStress(678, 679, 537, 641);
+            // testSharedEdgeStress(676, 679, 640, 641);
             return true;
         }
 
@@ -176,6 +238,8 @@ T DiscreteShell::computeTotalEnergy()
         addShellGravitionEnergy(energy);
     if (dynamics)
         addInertialEnergy(energy);
+    if (set_window)
+        addEnergyforDesiredTarget(energy);    
     energy -= u.dot(external_force);
     return energy;
 }
@@ -188,12 +252,17 @@ T DiscreteShell::computeResidual(VectorXT& residual)
         addShellGravitionForceEntry(residual);
     if (dynamics)
         addInertialForceEntry(residual);
+    if (set_window)
+        addGradientForDesiredTarget(residual);     
 
     if (!run_diff_test)
         iterateDirichletDoF([&](int offset, T target)
         {
-            residual[offset] = 0;
+            residual[offset] = target;
+            // interesting function of setting Dirichlet BC
+            // residual[offset] = 0;
         });
+
     return residual.norm();
 }
 
@@ -238,7 +307,9 @@ void DiscreteShell::buildSystemMatrix(StiffnessMatrix& K)
     if (add_gravity)
         addShellGravitionHessianEntry(entries);
     if (dynamics)
-        addInertialHessianEntries(entries);
+        addInertialHessianEntries(entries); 
+    // if (set_window)
+    //     addHessianForDesiredStrain(entries);    
     int n_dof = deformed.rows();
     K.resize(n_dof, n_dof);
     K.setFromTriplets(entries.begin(), entries.end());
@@ -343,14 +414,90 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     iglMatrixFatten<int, 3>(F, faces);
     deformed = undeformed;
     u = VectorXT::Zero(deformed.rows());
+    stress_tensors = std::vector<TM>(F.rows());
+    cauchy_stress_tensors = std::vector<TM>(F.rows());
+    homo_stress_tensors = std::vector<TM>(F.rows());
+    homo_stress_magnitudes = std::vector<T>(F.rows());
+
+    strain_tensors = std::vector<TM>(F.rows());
+    space_strain_tensors = std::vector<TM2>(F.rows()); 
+    optimization_homo_target_tensors = std::vector<TM2>(F.rows()); 
+    homo_strain_tensors = std::vector<TM>(F.rows());
+    homo_strain_magnitudes = std::vector<T>(F.rows());
+
+    weights << 1e3, 1e3, 1e3, 1e3;
+    epsilons << 0.9, 0.1, 0.1, 1.259;
+
+    cut_coloring = VectorXi::Zero(F.rows());
+    kernel_coloring_prob = VectorXT::Zero(F.rows());
+    kernel_coloring_avg = VectorXT::Zero(F.rows());
+    sample = std::vector<TV>(2);
+    setProbingLineDirections(8);
+
     external_force = VectorXT::Zero(deformed.rows());
-    external_force[5 * 3 + 2] = -10.0;
+
+    // natural BC (traction)
+    // for (int j = 0; j < 10; j++)
+    // {
+    //     external_force[j * 3 + 1] = -5;
+    // }
+    // for (int j = 90; j < 100; j++)
+    // {
+    //     external_force[j * 3 + 1] = 5;
+    // }
+    // for (int j = 0; j < undeformed.size()/3; j++)
+    // {
+    //     if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-5){
+    //         // for (int d = 0; d < 3; d++)
+    //         {
+    //             external_force[j * 3 + 1] = 35;
+    //         }
+    //     }
+    //     if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-5){
+    //         // for (int d = 0; d < 3; d++)
+    //         {
+    //             external_force[j * 3 + 1] = -35;
+    //         }
+    //     }
+    // }
+    // or single node natural BC
+    // external_force[5 * 3 + 2] = -10.0;
+
+    // Essential BC (displacement)
+    // set_window = true; // for window testing
+    window_x = 1;
+    window_y = 1;
+    window_length = 5;
+    window_height = 5;
+
+    T shell_len = max_corner(1) - min_corner(1);
+    T displacement = -0.1*shell_len;
+
+    if (!set_window) { // if no window testing required we stretch sheet
+   
+        for (int j = 0; j < undeformed.size()/3; j++)
+        {
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-5){
+                for (int d = 0; d < 3; d++)
+                {   
+                    // if(d == 0) continue;
+                    dirichlet_data[j * 3 + d] = 0.;
+                }
+            }
+        }
+        setEssentialBoundaryCondition(0, displacement);
+    }
+
+    nu_visualization = VectorXT::Zero(F.rows());
+    E_visualization = VectorXT::Zero(F.rows());
+
     buildHingeStructure();
-    dynamics = true;
-    add_gravity = true;
-    use_consistent_mass_matrix = false;
+    // dynamics = true;
+    dynamics = false;
+    add_gravity = false;
+    use_consistent_mass_matrix = true;
     // E = 0.0;
-    dt = 1.0 / 30.0;
+    dt = 1e-2;
     simulation_duration = 1000000;
     
     hinge_stiffness.setConstant(10);
@@ -460,6 +607,9 @@ void DiscreteShell::addShellInplaneEnergy(T& energy)
 {
     iterateFaceSerial([&](int face_idx)
     {
+        if(heterogenuous) {
+            setMaterialParameter(E, nu, face_idx);
+        }
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
@@ -471,8 +621,10 @@ void DiscreteShell::addShellInplaneEnergy(T& energy)
         TV X2 = undeformed_vertices.row(2);
 
         T k_s = E * thickness / (1.0 - nu * nu);
-
-        energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
+        T lambda = E * nu /((1+nu)*(1-2*nu));
+        T mu = E / (2*(1+nu));
+        if(quadratic) energy += compute2DQuadraticShellEnergy(lambda, mu, thickness, x0, x1, x2, X0, X1, X2);
+        else energy += compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
 
         
     });
@@ -481,7 +633,7 @@ void DiscreteShell::addShellInplaneEnergy(T& energy)
 void DiscreteShell::addShellBendingEnergy(T& energy)
 {
     iterateHingeSerial([&](const HingeIdx& hinge_idx, int hinge_cnt){
-        
+
         HingeVtx deformed_vertices = getHingeVtxDeformed(hinge_idx);
         HingeVtx undeformed_vertices = getHingeVtxUndeformed(hinge_idx);
 
@@ -509,72 +661,13 @@ void DiscreteShell::addShellEnergy(T& energy)
 
 void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
 {
-
-    
-
-    auto barycentricJacobian = [&](const Eigen::Vector3d &a, const Eigen::Vector3d &b, const Eigen::Vector3d &c)
-    {
-        Eigen::Vector3d v0 = b - a, v1 = c - a;
-        //Eigen::Vector3d v2 = p - a;
-        T d00 = v0.dot(v0); // (b - a).dot(b - a) => d d00 / d p = 0
-        T d01 = v0.dot(v1); // (b - a).dot(c - a) => d d01 / d p = 0
-        T d11 = v1.dot(v1); // (c - a).dot(c - a) => d d11 / dp = 0
-        //T d20 = v2.dot(v0); // (p - a).dot(b - a) => d d20 / dp = (b - a)^T
-        //T d21 = v2.dot(v1); //  ( p - a).dot(c - a) = > d21 / dp = (c - a)^T
-        T denom = d00 * d11 - d01 * d01; // => d00 * d11 constant in => drops out, d01 constant in p => derivative is 0
-        //v = (d11 * d20 - d01 * d21) / denom;
-        //w = (d00 * d21 - d01 * d20) / denom;
-        //u = 1.0f - v - w;
-        //Eigen::Vector3d dvdp = (d11 * dd20 / dp - d01 * d d21 / dp) / denom;
-        Eigen::Vector3d dvdp = (d11 * (b - a) - d01 * (c - a)) / denom;
-        Eigen::Vector3d dwdp = (d00 * (c - a) - d01 * (b - a)) / denom;
-        Matrix<T, 2, 3> result;
-        result.row(0) = dvdp.transpose();
-        result.row(1) = dwdp.transpose();
-        return result;
-    };
-
-    auto compute3DCSTDeformationGradient = [&](const Eigen::Vector3d &x1Undef, const Eigen::Vector3d &x2Undef, const Eigen::Vector3d &x3Undef,
-        const Eigen::Vector3d &x1, const Eigen::Vector3d &x2, const Eigen::Vector3d &x3
-    )
-    {
-        // defGrad = d x / d X
-        // X(b) = X * N(b) = X * [ 1 - b1 - b2; b1; b2];
-        // b(X) = [X2 - X1, X3 - X1]^-1 [X - X1]
-        // x(X) = x * N(b(X)) then take the jacobian of this to get defgrad
-        // d x / d X = x * d N / dX = x * dN/db * [X2 - X1, X3 - X1]^-1;
-        // however here X means a 2 dimensional vector! so we get a 3x2 defgrad
-        // x(X) = x * N(Barycentric(X, X1, X2, X3))
-        // defGrad = dx / d X = x * dN/dB * dB /dX
-        // that would work except that the defGradient is gonna be 3x3 and in the undef config. something like [1, 0, 0;0,0,0;0,0,1];
-        // and then E = 0.5 * (F^T F - I)  is gonna give a non zero energy in the undef config.
-        //instead we choose a 2D coordinate system X* in the undef configuration for which we compute the def grad
-        // defGrad = d x / d X*
-        // x(X*) = x * N(Barycentric(X(X*)));
-        // X(X*) = X1 + t * X*[0] + q *X*[1]
-
-        Eigen::Vector3d tUndef = (x2Undef - x1Undef).normalized();
-        Eigen::Vector3d e2Undef = (x3Undef - x1Undef);
-        Eigen::Vector3d qUndef = (e2Undef - tUndef * e2Undef.dot(tUndef)).normalized();
-
-        Eigen::Matrix3d x;
-        x << x1, x2, x3;
-
-        //N(b) = [1 - b1 - b2, b1, b2]
-        Matrix<T, 3, 2> dNdb;
-        dNdb << -1.0, -1.0,
-            1.0, 0.0,
-            0.0, 1.0;
-
-        Matrix<T, 2, 3> dBdX = barycentricJacobian(x1Undef, x2Undef, x3Undef);
-        Matrix<T, 3, 2> dXdXStar;
-        dXdXStar << tUndef, qUndef;
-        Matrix<T, 3, 2> defGrad = x * dNdb * dBdX * dXdXStar; //note that this F is not very intuitive it can contain -1 for undef configuration, but its not a problem as long as only F^T*F is used
-        return defGrad;
-    };
-
     iterateFaceSerial([&](int face_idx)
     {
+        if(heterogenuous) {
+            setMaterialParameter(E, nu, face_idx);
+        }
+        nu_visualization[face_idx] = nu;
+        E_visualization[face_idx] = E;
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
         FaceIdx indices = faces.segment<3>(face_idx * 3);
@@ -582,10 +675,12 @@ void DiscreteShell::addShellInplaneForceEntries(VectorXT& residual)
         T k_s = E * thickness / (1.0 - nu * nu);
         TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
-    
-
+        
         Vector<T, 9> dedx;
-        compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
+        T lambda = E * nu /((1+nu)*(1-2*nu));
+        T mu = E / (2*(1+nu));
+        if(quadratic) dedx = compute2DQuadraticShellEnergyGradient(lambda, mu, thickness, x0, x1, x2, X0, X1, X2);
+        else compute3DCSTShellEnergyGradient(nu, k_s, x0, x1, x2, X0, X1, X2, dedx);
         
         addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx);
     });
@@ -620,7 +715,10 @@ void DiscreteShell::addShellForceEntry(VectorXT& residual)
 void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
 {
     iterateFaceSerial([&](int face_idx)
-    {
+    {   
+        if(heterogenuous) {
+            setMaterialParameter(E, nu, face_idx);
+        }
         FaceVtx vertices = getFaceVtxDeformed(face_idx);
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
 
@@ -632,7 +730,11 @@ void DiscreteShell::addShellInplaneHessianEntries(std::vector<Entry>& entries)
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
 
         Matrix<T, 9, 9> hessian;
-        compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2, hessian);
+        T lambda = E * nu /((1+nu)*(1-2*nu));
+        T mu = E / (2*(1+nu));
+        if(quadratic) hessian = compute2DQuadraticShellEnergyHessian(lambda, mu, thickness, x0, x1, x2, X0, X1, X2);
+        else compute3DCSTShellEnergyHessian(nu, k_s, x0, x1, x2, X0, X1, X2, hessian);
+        // if(face_idx == 0) std::cout << hessian << "\n and \n" << compute2DQuadraticShellEnergyHessian(nu, E, thickness, x0, x1, x2, X0, X1, X2) << std::endl;
 
 
         addHessianEntry<3, 3>(entries, {indices[0], indices[1], indices[2]}, hessian);
@@ -1008,16 +1110,13 @@ void DiscreteShell::addInertialEnergy(T& energy)
     }
     else
     {
-        VectorXT x_hat = deformed - xn - vn * dt;
-        VectorXT Mx_hat = density * mass_diagonal.array() * x_hat.array();
-        kinetic_energy += 0.5 * x_hat.dot(x_hat)  / dt / dt ;
-        // for (int i = 0; i < deformed.rows() / 3; i++)
-        // {
-        //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
-        //     kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
-        //                                             - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-        //                                             )) / (2.0 * std::pow(dt, 2));
-        // }
+        for (int i = 0; i < deformed.rows() / 3; i++)
+        {
+            TV x_n_plus_1 = deformed.segment<3>(i * 3);
+            kinetic_energy += (density * mass_diagonal[i] * (x_n_plus_1.dot(x_n_plus_1)
+                                                    - 2.0 * x_n_plus_1.dot(xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                    )) / (2.0 * std::pow(dt, 2));
+        }
     }
     
     energy += kinetic_energy;
@@ -1047,16 +1146,13 @@ void DiscreteShell::addInertialForceEntry(VectorXT& residual)
     }
     else
     {
-        VectorXT x_hat = deformed - xn - vn * dt;
-        VectorXT Mx_hat = density * mass_diagonal.array() * x_hat.array();
-        residual -= x_hat / dt / dt;
-        // for (int i = 0; i < deformed.rows() / 3; i++)
-        // {
-        //     TV x_n_plus_1 = deformed.segment<3>(i * 3);
-        //     residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
-        //                                             - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
-        //                                             )) / (2.0 * std::pow(dt, 2));
-        // }
+        for (int i = 0; i < deformed.rows() / 3; i++)
+        {
+            TV x_n_plus_1 = deformed.segment<3>(i * 3);
+            residual.segment<3>(i * 3) -= (density * mass_diagonal[i] * (2.0 * x_n_plus_1
+                                                    - 2.0 * (xn.segment<3>(i * 3) + vn.segment<3>(i * 3) * dt)
+                                                    )) / (2.0 * std::pow(dt, 2));
+        }
     }
 }
 
@@ -1078,8 +1174,7 @@ void DiscreteShell::addInertialHessianEntries(std::vector<Entry>& entries)
     {
         for (int i = 0; i < deformed.rows() / 3; i++)
         {
-            // TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
-            TM hess = TM::Identity() / std::pow(dt, 2);
+            TM hess = density * TM::Identity() * mass_diagonal[i] / std::pow(dt, 2);
             addHessianEntry<3, 3>(entries, {i}, hess);
         }
     }
@@ -1217,3 +1312,958 @@ void DiscreteShell::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matrix<T
     
 }
 // ============================= Dynamics End =============================
+
+// ============================= Stress Tensor Utilities ============================
+
+void DiscreteShell::computeStrainAndStressPerElement(){
+
+    iterateFaceSerial([&](int face_idx)
+    {   
+        if(heterogenuous) {
+            setMaterialParameter(E, nu, face_idx);
+        }
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        T k_s = E * thickness / (1.0 - nu * nu);
+
+        if(quadratic) {
+            Matrix<T, 2, 2> F = compute2DDeformationGradient(x0, x1, x2, X0, X1, X2, {1.0, 0.});
+            if(face_idx == 60) std::cout << "F: \n" << F << std::endl;
+            F = compute2DDeformationGradient(x0, x1, x2, X0, X1, X2, {1/3., 1/3.});
+            if(face_idx == 60) std::cout << "F middle: \n" << F << std::endl;
+            TM2 GreenS = 0.5 *(F.transpose()*F - TM2::Identity());
+            space_strain_tensors[face_idx] = GreenS;
+            TM2 S = thickness*(nu * GreenS.trace() *TM2::Identity() + 2 * E * GreenS);
+            T areaRatio = ((x1-x0).cross(x2-x0)).norm() / ((X1-X0).cross(X2-X0)).norm();
+            cauchy_stress_tensors[face_idx].block(0,0,2,2) = F*S*F.transpose()/areaRatio;
+            stress_tensors[face_idx].block(0,0,2,2) = S;
+            strain_tensors[face_idx].block(0,0,2,2) = GreenS;
+            optimization_homo_target_tensors[face_idx] = F;
+
+        } else {
+            Matrix<T, 3, 2> F = computeDeformationGradientwrt2DXSpace(X0, X1, X2, x0, x1, x2);
+            TM2 GreenS = computeCauchyStrainwrt2dXSpace(F);
+            // if(face_idx == 0) std::cout << "GS: \n" << GreenS << std::endl;
+            space_strain_tensors[face_idx] = GreenS;
+            TM2 S = k_s * ((1-nu)*2*GreenS + nu*2*GreenS.trace()*TM2::Identity());
+            // if(face_idx == 0) std::cout << "S: \n" << S << std::endl;
+            T areaRatio = ((x1-x0).cross(x2-x0)).norm() / ((X1-X0).cross(X2-X0)).norm();
+            cauchy_stress_tensors[face_idx] = F*S*F.transpose()/areaRatio;
+
+            TM2 x; x.col(0) = (vertices.row(1) - vertices.row(0)).segment(0, 2);x.col(1) = (vertices.row(2) - vertices.row(0)).segment(0, 2);
+            TM2 X; X.col(0) = (undeformed_vertices.row(1) - undeformed_vertices.row(0)).segment(0, 2);X.col(1) = (undeformed_vertices.row(2) - undeformed_vertices.row(0)).segment(0, 2);
+            TM2 F_2D = x*X.lu().solve(TM2::Identity());
+            optimization_homo_target_tensors[face_idx] = F_2D;
+            TM2 F_2D_inv = F_2D.lu().solve(TM2::Identity());
+            stress_tensors[face_idx].block(0,0,2,2) = F_2D_inv * (F*S*F.transpose()).block(0,0,2,2) * F_2D_inv.transpose();
+            // if(face_idx == 0) std::cout << "S post: \n" << stress_tensors[face_idx].block(0,0,2,2) << std::endl;
+            TM2 E_2D = 0.5*(F_2D.transpose()*F_2D - TM2::Identity());
+            // if(face_idx == 0) std::cout << "E_2D: \n" << E_2D << std::endl;
+            strain_tensors[face_idx].block(0,0,2,2) = E_2D;
+            // stress_tensors[face_idx].block(0,0,2,2) = k_s * ((1-nu)*2*E_2D + nu*2*E_2D.trace()*TM2::Identity());
+            // if(face_idx == 0) std::cout << "S 2D post: \n" <<  k_s * ((1-nu)*2*E_2D + nu*2*E_2D.trace()*TM2::Identity()) << std::endl;
+            // std::cout << face_idx << " " << E << " " << E_2D(1,1) << std::endl;
+        }
+    });
+}
+
+void DiscreteShell::computeHomogenization(){
+    if(set_window){
+        iterateFaceSerial([&](int face_idx)
+        {
+            TM homo_tensor = computeHomogenisedStressTensorinWindow();
+            if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+                homo_stress_tensors[face_idx] = homo_tensor;
+                homo_stress_magnitudes[face_idx] = homo_stress_tensors[face_idx].norm();
+            }
+            homo_tensor = computeHomogenisedStrainTensorinWindow();
+            if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+                homo_strain_tensors[face_idx] = homo_tensor;
+                homo_strain_magnitudes[face_idx] = homo_strain_tensors[face_idx].norm();
+            }
+        });
+    }
+}
+
+void DiscreteShell::computeEnergyComparison(){
+
+    iterateFaceSerial([&](int face_idx)
+    {   
+        if(heterogenuous) {
+            setMaterialParameter(E, nu, face_idx);
+        }
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        T k_s = E * thickness / (1.0 - nu * nu);
+
+        Matrix<T, 3, 2> F = computeDeformationGradientwrt2DXSpace(X0, X1, X2, x0, x1, x2);
+        TM2 E = computeCauchyStrainwrt2dXSpace(F);
+
+        double energy = k_s * 0.5 * ((X1-X0).cross(X2-X0)).norm() * ((1-nu) * E.squaredNorm() + nu * E.trace() * E.trace());
+        double energy_opt = compute3DCSTShellEnergy(nu, k_s, x0, x1, x2, X0, X1, X2);
+        if (face_idx == 0) std::cout << "Energy comparison: " << energy << "  " << energy_opt << std::endl;
+    });
+}
+
+Matrix<T, 2, 2> DiscreteShell::computeCauchyStrainwrt2dXSpace(Matrix<T, 3, 2> F){
+    return 0.5 * (F.transpose()*F - TM2::Identity());
+}
+
+Matrix<T, 3, 2> DiscreteShell::computeDeformationGradientwrt2DXSpace(
+    const TV X1, const TV X2, const TV X3, 
+    const TV x1, const TV x2, const TV x3)
+{
+    TV localSpannT1 = (X2-X1).normalized();
+    TV localSpannT2 = ((X3-X1) - localSpannT1*((X3-X1).dot(localSpannT1))).normalized();
+
+    FaceVtx x; x << x1, x2, x3;
+
+    Matrix<T, 3, 2> dNdB; dNdB << -1, -1, 1, 0, 0, 1;
+
+    Matrix<T, 2, 3> dBdX = computeBarycentricJacobian(X1, X2, X3);
+    Matrix<T, 3, 2> dXdX_2D;  dXdX_2D << localSpannT1, localSpannT2;
+
+    Matrix<T, 3, 2> F = x * dNdB * dBdX * dXdX_2D;
+
+    return F;
+}
+
+// pseudoinverse of [X2-X1, X3-X1]
+Matrix<T, 2, 3> DiscreteShell::computeBarycentricJacobian(
+    const TV X1, const TV X2, const TV X3)
+{
+    TV v1 = (X2-X1);
+    TV v2 = (X3-X1);
+
+    T denominator = v1.squaredNorm()*v2.squaredNorm() - v1.dot(v2) * v1.dot(v2);
+
+    Matrix<T, 3, 2> transpose_dBdX;
+    transpose_dBdX << v1*v2.squaredNorm() - v2*v1.dot(v2),
+                       v2*v1.squaredNorm() - v1*v1.dot(v2);
+
+    transpose_dBdX /= denominator;                   
+
+    return transpose_dBdX.transpose();
+}
+
+// ======================================= Test Window Utilities =================================
+
+// assume valid start coordinate for the window
+Matrix<T, 3, 3> DiscreteShell::computeHomogenisedStressTensorinWindow(){
+    T total_volume = 0;
+    TM homogenised_stress_tensor = TM::Zero();
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+            T area = 0.5 * ((X1-X0).cross(X2-X0)).norm();
+            total_volume += area * thickness;
+            homogenised_stress_tensor += cauchy_stress_tensors[face_idx] * area * thickness;
+        }
+    });
+    if (total_volume <= 0) {std::cout << "No triangle detected in the window!\n"; return TM::Zero();}
+    return homogenised_stress_tensor / total_volume;
+}
+
+T DiscreteShell::computeWindowAreaRatio(){
+    T area_undeformed = 0;
+    T area_deformed = 0;
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+            area_undeformed += 0.5 * ((X1-X0).cross(X2-X0)).norm();
+            area_deformed += 0.5 * ((x1-x0).cross(x2-x0)).norm();
+        }
+    });
+
+    return area_deformed / area_undeformed;
+}
+
+// assume valid start coordinate for the window
+Matrix<T, 3, 3> DiscreteShell::computeHomogenisedStrainTensorinWindow(){
+    total_window_area_undeformed = 0;
+    TM homogenised_strain_tensor = TM::Zero();
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+            T area = 0.5 * ((X1-X0).cross(X2-X0)).norm();
+            total_window_area_undeformed += area;
+            homogenised_strain_tensor.block(0,0,2,2) += space_strain_tensors[face_idx] * area;
+        }
+    });
+    if (total_window_area_undeformed <= 0) {std::cout << "No triangle detected in the window!\n"; return TM::Zero();}
+    return homogenised_strain_tensor / total_window_area_undeformed;
+}
+
+Matrix<T, 3, 3> DiscreteShell::computeHomogenisedTargetTensorinWindow(){
+    total_window_area_undeformed = 0;
+    TM homogenised_tensor = TM::Zero();
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxDeformed(face_idx);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV X0 = undeformed_vertices.row(0); 
+        TV X1 = undeformed_vertices.row(1); 
+        TV X2 = undeformed_vertices.row(2);
+
+        if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+            T area = 0.5 * ((X1-X0).cross(X2-X0)).norm();
+            total_window_area_undeformed += area;
+            homogenised_tensor.block(0,0,2,2) += optimization_homo_target_tensors[face_idx] * area;
+        }
+    });
+    if (total_window_area_undeformed <= 0) {std::cout << "No triangle detected in the window!\n"; return TM::Zero();}
+    return homogenised_tensor / total_window_area_undeformed;
+}
+
+// assume valid start coordinate for the window
+// bool DiscreteShell::TriangleinsideWindow(int start_x, int start_y, int length, int height, int face_idx){
+
+//     int start_node_idx_bottom = 10*start_x + start_y;
+//     int start_node_idx_top = 10*(start_x+height) + start_y;
+//     FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+//     for(int i = 0; i < indices.size(); ++i){
+//         int current_idx = indices[i];
+//         if(current_idx / 10 > std::min(9, height+start_x) || current_idx/10 < start_x) return false;
+//         if(current_idx % 10 < start_y || current_idx % 10 > std::min(9, length+start_y)) return false;
+//     }
+//     return true;
+// }
+
+bool DiscreteShell::TriangleinsideWindow(int start_x, int start_y, int length, int height, int face_idx){
+
+    FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+    TV d = undeformed_vertices.row(0) - undeformed_vertices.row(1);
+    T dx = std::max(std::abs(d(0)), std::abs(d(1)));
+    TV CoM = triangleCenterofMass(undeformed_vertices);
+    TV start; start << -dx*start_x, dx*start_y, 0;
+    TV diff = CoM - start;
+    // if(face_idx == 99) {std::cout << "CoM of 99 \n" << CoM  << "\ndiff: " << -diff(0)/dx << " " << diff(1)/dx << "\n dx: "<< dx<<std::endl;}
+    if(-diff(0) > length*dx || diff(1)/dx > height || diff(0) > 0. || diff(1) < 0) return false;
+
+    return true;
+}
+
+void DiscreteShell::addEnergyforDesiredTarget(T &energy){
+
+    computeStrainAndStressPerElement();
+    TM homo_tensor = computeHomogenisedTargetTensorinWindow(); 
+    energy += (homo_tensor(0,0)-epsilons(0))*(homo_tensor(0,0)-epsilons(0))*weights(0) + 
+        (homo_tensor(1,1)-epsilons(3))*(homo_tensor(1,1)-epsilons(3))*weights(3) + (homo_tensor(0,1)-epsilons(1))*(homo_tensor(0,1)-epsilons(1))*weights(1) +
+        (homo_tensor(1,0)-epsilons(2))*(homo_tensor(1,0)-epsilons(2))*weights(2);
+}
+
+Vector<T, 9> DiscreteShell::computeGradientForDesiredTargetXX(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3){
+    T p[9]; T q[9];
+    p[0] = X1(0); p[1] = X1(1); p[2] = X1(2);
+    p[3] = X2(0); p[4] = X2(1); p[5] = X2(2);
+    p[6] = X3(0); p[7] = X3(1); p[8] = X3(2);
+    q[0] = x1(0); q[1] = x1(1); q[2] = x1(2);
+    q[3] = x2(0); q[4] = x2(1); q[5] = x2(2);
+    q[6] = x3(0); q[7] = x3(1); q[8] = x3(2);
+    T t1 = (p[3] - p[6]) * p[1] - (-p[6] + p[0]) * p[4] + p[7] * (-p[3] + p[0]);
+    t1 = 0.1e1 / t1;
+    VectorXT gradient(9);
+    gradient[0] = -(p[4] - p[7]) * t1;
+    gradient[1] = 0;
+    gradient[2] = 0;
+    gradient[3] = (p[1] - p[7]) * t1;
+    gradient[4] = 0;
+    gradient[5] = 0;
+    gradient[6] = -(-p[4] + p[1]) * t1;
+    gradient[7] = 0;
+    gradient[8] = 0;
+
+    return gradient;
+}
+
+Vector<T, 9> DiscreteShell::computeGradientForDesiredTargetYY(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3){
+    T p[9]; T q[9];
+    p[0] = X1(0); p[1] = X1(1); p[2] = X1(2);
+    p[3] = X2(0); p[4] = X2(1); p[5] = X2(2);
+    p[6] = X3(0); p[7] = X3(1); p[8] = X3(2);
+    q[0] = x1(0); q[1] = x1(1); q[2] = x1(2);
+    q[3] = x2(0); q[4] = x2(1); q[5] = x2(2);
+    q[6] = x3(0); q[7] = x3(1); q[8] = x3(2);
+    T t1 = (p[4] - p[7]) * p[0] - (p[1] - p[7]) * p[3] + p[6] * (-p[4] + p[1]);
+    t1 = 0.1e1 / t1;
+
+    VectorXT gradient(9);gradient[0] = 0;
+    gradient[1] = -(p[3] - p[6]) * t1;
+    gradient[2] = 0;
+    gradient[3] = 0;
+    gradient[4] = (-p[6] + p[0]) * t1;
+    gradient[5] = 0;
+    gradient[6] = 0;
+    gradient[7] = -(-p[3] + p[0]) * t1;
+    gradient[8] = 0;
+
+
+    return gradient;
+}
+
+Vector<T, 9> DiscreteShell::computeGradientForDesiredTargetXY(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3){
+    T p[9]; T q[9];
+    p[0] = X1(0); p[1] = X1(1); p[2] = X1(2);
+    p[3] = X2(0); p[4] = X2(1); p[5] = X2(2);
+    p[6] = X3(0); p[7] = X3(1); p[8] = X3(2);
+    q[0] = x1(0); q[1] = x1(1); q[2] = x1(2);
+    q[3] = x2(0); q[4] = x2(1); q[5] = x2(2);
+    q[6] = x3(0); q[7] = x3(1); q[8] = x3(2);
+    T t1 = (p[4] - p[7]) * p[0] - (p[1] - p[7]) * p[3] + p[6] * (-p[4] + p[1]);
+    t1 = 0.1e1 / t1;
+    VectorXT gradient(9);
+    gradient[0] = -(p[3] - p[6]) * t1;
+    gradient[1] = 0;
+    gradient[2] = 0;
+    gradient[3] = (-p[6] + p[0]) * t1;
+    gradient[4] = 0;
+    gradient[5] = 0;
+    gradient[6] = -(-p[3] + p[0]) * t1;
+    gradient[7] = 0;
+    gradient[8] = 0;
+
+
+    return gradient;
+}
+
+Vector<T, 9> DiscreteShell::computeGradientForDesiredTargetYX(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3){
+    T p[9]; T q[9];
+    p[0] = X1(0); p[1] = X1(1); p[2] = X1(2);
+    p[3] = X2(0); p[4] = X2(1); p[5] = X2(2);
+    p[6] = X3(0); p[7] = X3(1); p[8] = X3(2);
+    q[0] = x1(0); q[1] = x1(1); q[2] = x1(2);
+    q[3] = x2(0); q[4] = x2(1); q[5] = x2(2);
+    q[6] = x3(0); q[7] = x3(1); q[8] = x3(2);
+    T t1 = (p[3] - p[6]) * p[1] - (-p[6] + p[0]) * p[4] + p[7] * (-p[3] + p[0]);
+    t1 = 0.1e1 / t1;
+    VectorXT gradient(9);
+    gradient[0] = 0;
+    gradient[1] = -(p[4] - p[7]) * t1;
+    gradient[2] = 0;
+    gradient[3] = 0;
+    gradient[4] = (p[1] - p[7]) * t1;
+    gradient[5] = 0;
+    gradient[6] = 0;
+    gradient[7] = -(-p[4] + p[1]) * t1;
+    gradient[8] = 0;
+
+    return gradient;
+}
+
+void DiscreteShell::addGradientForDesiredTarget(VectorXT& residual)
+{   
+    computeStrainAndStressPerElement();
+    TM homo_tensor = computeHomogenisedTargetTensorinWindow(); 
+    std::cout << "Current constraint energy: " << (homo_tensor(0,0)-epsilons(0))*(homo_tensor(0,0)-epsilons(0)) + 
+        (homo_tensor(1,1)-epsilons(3))*(homo_tensor(1,1)-epsilons(3)) + (homo_tensor(0,1)-epsilons(1))*(homo_tensor(0,1)-epsilons(1)) +
+        (homo_tensor(1,0)-epsilons(2))*(homo_tensor(1,0)-epsilons(2))
+        << std::endl;
+    std::cout << "Current homogenised target tensor: \n" << homo_tensor << std::endl;    
+    iterateFaceSerial([&](int face_idx)
+    {
+        
+        if(TriangleinsideWindow(window_x, window_y, window_length, window_height, face_idx)){
+            FaceVtx vertices = getFaceVtxDeformed(face_idx);
+            FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+            FaceIdx indices = faces.segment<3>(face_idx * 3);
+
+            TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+            TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
+            T area = 0.5 * ((X1-X0).cross(X2-X0)).norm();
+            Vector<T, 9> dedx_xx = computeGradientForDesiredTargetXX(X0, X1, X2, x0, x1, x2)*area;
+            dedx_xx *= 2*(homo_tensor(0,0)-epsilons(0))/total_window_area_undeformed;
+            Vector<T, 9> dedx_xy = computeGradientForDesiredTargetXY(X0, X1, X2, x0, x1, x2)*area;
+            dedx_xy *= 2*(homo_tensor(0,1)-epsilons(1))/total_window_area_undeformed;
+            Vector<T, 9> dedx_yy = computeGradientForDesiredTargetYY(X0, X1, X2, x0, x1, x2)*area;
+            dedx_yy *= 2*(homo_tensor(1,1)-epsilons(3))/total_window_area_undeformed;
+            Vector<T, 9> dedx_yx = computeGradientForDesiredTargetYX(X0, X1, X2, x0, x1, x2)*area;
+            dedx_yx *= 2*(homo_tensor(1,0)-epsilons(2))/total_window_area_undeformed;
+            
+            addForceEntry<3>(residual, {indices[0], indices[1], indices[2]}, -dedx_xx*weights(0)-dedx_yy*weights(3)-dedx_xy*weights(1)-dedx_yx*weights(2));
+        }
+    });
+}
+
+T DiscreteShell::computeTestWindowForces(VectorXT& forces)
+{
+    deformed = undeformed + u;
+    addShellForceEntry(forces);
+    if (add_gravity)
+        addShellGravitionForceEntry(forces);
+    if (dynamics)
+        addInertialForceEntry(forces);
+
+    return forces.norm();
+}
+
+// ============================= Boundary Utilities =================================
+
+// assume for now I only set explicit BC for the lower boundary (node_idx 0-9)
+void DiscreteShell::setEssentialBoundaryCondition(T displacement_x, T displacement_y){
+
+    for (int j = 0; j < undeformed.size()/3; j++)
+    {
+        if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= 0){
+            u[j * 3 + 1] = displacement_y;
+            u[j * 3] = displacement_x;
+            for (int d = 0; d < 3; d++)
+            {   
+                // if(d == 0) continue;
+                dirichlet_data[j * 3 + d] = 0.;
+            }
+        }
+    }
+
+}
+
+
+// ============================= Kernel-weighted Cut Utilities ======================
+// assume planar case for now
+void DiscreteShell::setProbingLineDirections(unsigned int num_directions){
+    direction = std::vector<TV>(num_directions);
+    T angle = std::acos(-1) / num_directions;
+    for(int i = 0; i < num_directions; ++i){
+        direction[i] << std::cos(angle*i), std::sin(angle*i), 0;
+    }
+}
+
+Matrix<T, 3, 3> DiscreteShell::findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions){
+    int tri = pointInTriangle(sample_loc);
+    if(tri == -1) std::cout << "Sample point not in mesh!" << std::endl;
+    // std::cout << "Found sample point in triangle: " << tri << std::endl;
+    // TM2 F_2D_inv = optimization_homo_target_tensors[tri].lu().solve(TM2::Identity());
+    int c = line_directions.size();
+    MatrixXT n(3, c);
+    MatrixXT t(3, c);
+    for(int i = 0; i < c; ++i){
+        TV direction = line_directions.at(i);
+        TV2 direction_normal_2D; direction_normal_2D << direction(1), -direction(0);
+        // direction_normal_2D = F_2D_inv.transpose()*direction_normal_2D;
+        TV direction_normal; direction_normal.segment(0,2) = direction_normal_2D;
+        // direction_normal = direction_normal.normalized(); 
+        t.col(i) = computeWeightedStress(sample_loc, direction);
+        n.col(i) = direction_normal;
+    }
+
+    bool fit_symmetric_constrained = true;
+    TM fitted_symmetric_tensor;
+    if(!fit_symmetric_constrained){
+        MatrixXT A = n.transpose();
+        MatrixXT b = t.transpose();
+        TM x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+        fitted_symmetric_tensor = x.transpose();
+    } else {
+        MatrixXT A = MatrixXT::Zero(3*c,6);
+        VectorXT b(3*c);
+        for(int i = 0; i < c; ++i){
+            MatrixXT A_block = MatrixXT::Zero(3,6);
+            TV normal = n.col(i);
+            A_block << normal(0), normal(1), 0, normal(2), 0, 0,
+                    0, normal(0), normal(1), 0, normal(2), 0,
+                    0, 0, 0, normal(0), normal(1), normal(2);
+            A.block(i*3, 0, 3, 6) = A_block;
+            b.segment(i*3, 3) = t.col(i);
+        }
+        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+        fitted_symmetric_tensor << x(0), x(1), x(3), 
+                                    x(1), x(2), x(4),
+                                    x(3), x(4), x(5);
+    }
+
+    return fitted_symmetric_tensor;
+}
+
+Matrix<T, 2, 2> DiscreteShell::findBestStrainTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions){
+    int c = line_directions.size();
+    MatrixXT n(3, c);
+    VectorXT t(c);
+    for(int i = 0; i < c; ++i){
+        TV direction = line_directions.at(i);
+        t(i) = computeWeightedStrain(sample_loc, direction);
+        // if(t(i) >= 1e3 || t(i) <= -1e3) {std::cout << "sample " << sample_loc.transpose() <<  " with direction " << direction.transpose() << " : with strain: " << t(i) << std::endl;} 
+        n.col(i) = direction;
+    }
+
+    TM2 fitted_symmetric_tensor;
+    MatrixXT A = MatrixXT::Zero(c,3);
+    for(int i = 0; i < c; ++i){
+        MatrixXT A_block = MatrixXT::Zero(1,3);
+        TV2 normal = n.col(i).segment(0,2);
+        A_block << normal(0)*normal(0), 2*normal(1)*normal(0), normal(1)*normal(1);
+        A.row(i) = A_block;
+        }
+        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*t);
+        fitted_symmetric_tensor << x(0), x(1), 
+                                    x(1), x(2);
+
+    return fitted_symmetric_tensor;
+}
+
+Matrix<T, 3, 3> DiscreteShell::findBestStressTensorviaAveraging(const TV sample_loc){
+    T pi = std::acos(-1);
+    T std = 7e-3;
+    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
+    auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
+        TV2 dist = (CoM-sample_loc).segment(0,2);
+        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+    };
+
+    T sum = 0.;
+    TM stress = TM::Zero();
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxUndeformed(face_idx);
+            
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+
+        stress.block(0,0,2,2) += gaussian_kernel(sample_loc, triangleCenterofMass(vertices)) * 
+            stress_tensors[face_idx].block(0,0,2,2);
+        sum += gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
+
+        if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_avg[face_idx] = gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
+
+    }); 
+    return stress/sum;
+}
+
+Matrix<T, 3, 3> DiscreteShell::findBestStrainTensorviaAveraging(const TV sample_loc){
+    T pi = std::acos(-1);
+    T std = 7e-3;
+    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
+    auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
+        TV2 dist = (CoM-sample_loc).segment(0,2);
+        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+    };
+
+    T sum = 0.;
+    TM strain = TM::Zero();
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxUndeformed(face_idx);
+            
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+
+        strain += gaussian_kernel(sample_loc, triangleCenterofMass(vertices)) * strain_tensors[face_idx];
+        sum += gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
+
+    }); 
+    return strain/sum;
+}
+
+Vector<T, 3> DiscreteShell::computeWeightedStress(const TV sample_loc, TV direction){
+    T pi = std::acos(-1);
+    T std = 7e-3;
+    int choose_gaussian_kernel = 1;
+    auto gaussian_kernel1 = [pi, std](T distance){
+        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
+    };
+    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
+    auto gaussian_kernel2 = [pi, variance_matrix](TV sample_loc, TV CoM){
+        TV2 dist = (CoM-sample_loc).segment(0,2);
+        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+    };
+    T sum = 0.;
+    TV stress = TV::Zero();
+    TV direction_normal; direction_normal << direction(1), -direction(0), 0;
+    direction_normal = direction_normal.normalized(); 
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV cut_point_coordinate;
+        if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
+            TV middle = middlePointoflineCutTriangle(x0, x1, x2, cut_point_coordinate);
+            if(choose_gaussian_kernel == 1){
+                T distance = (sample_loc - middle).norm();
+                stress += gaussian_kernel1(distance) * stress_tensors[face_idx] * direction_normal;
+                sum += gaussian_kernel1(distance);
+
+                // visulization
+                if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_prob[face_idx] = gaussian_kernel1(distance);
+            } else if(choose_gaussian_kernel == 2){
+                stress += gaussian_kernel2(sample_loc, middle) * stress_tensors[face_idx] * direction_normal;
+                sum += gaussian_kernel2(sample_loc, middle);
+
+                // visulization
+                if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_prob[face_idx] = gaussian_kernel2(sample_loc, middle);
+            }
+            
+        }
+    });
+    if (sum <= 0.) std::cout << "Sum is 0 for direction " << direction.transpose() << std::endl; 
+
+    return stress/sum;
+}
+
+T DiscreteShell::computeWeightedStrain(const TV sample_loc, TV direction){
+    T pi = std::acos(-1);
+    T std = 7e-3;
+    int choose_gaussian_kernel = 1;
+    auto gaussian_kernel1 = [pi, std](T distance){
+        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
+    };
+    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
+    auto gaussian_kernel2 = [pi, variance_matrix](TV sample_loc, TV CoM){
+        TV2 dist = (CoM-sample_loc).segment(0,2);
+        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+    };
+    T sum = 0.;
+    T strain = 0;
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        FaceVtx vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+
+        TV cut_point_coordinate;
+        bool compute_with_segments = true;
+        if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
+            TV middle = middlePointoflineCutTriangle(x0, x1, x2, cut_point_coordinate);
+            // if((sample_loc-sample[1]).norm() <= 1e-4) {std::cout << "triangle "<< face_idx << " has strain : " << 
+            //         strainInCut(face_idx, cut_point_coordinate) << " in direction: " << direction.transpose()<< 
+            //         " with cut in " << cut_point_coordinate.transpose() << std::endl; 
+            //         }
+            if(choose_gaussian_kernel == 1){
+                T distance = (sample_loc - middle).norm();
+                if(compute_with_segments)
+                    strain += gaussian_kernel1(distance)*strainInCut(face_idx, cut_point_coordinate);
+                else strain += gaussian_kernel1(distance)*direction.transpose()*strain_tensors[face_idx]*direction;    
+                sum += gaussian_kernel1(distance);
+
+            } else if(choose_gaussian_kernel == 2){
+                if(compute_with_segments)
+                    strain += gaussian_kernel2(sample_loc, middle)*strainInCut(face_idx, cut_point_coordinate);
+                else gaussian_kernel2(sample_loc, middle)*direction.transpose()*strain_tensors[face_idx]*direction; 
+                sum += gaussian_kernel2(sample_loc, middle);
+            }
+        }
+    });
+
+    if(sum <= 0) {std::cout << "Weighted strain: "<< strain << " Something wrong with the weighting!\n";} 
+
+    return strain/sum;
+}
+
+Vector<T, 3> DiscreteShell::triangleCenterofMass(FaceVtx vertices){
+    TV CoM; CoM << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+    return CoM;
+}
+
+void DiscreteShell::visualizeCuts(const std::vector<TV> sample_points, const std::vector<TV> line_directions){
+    unsigned int tag = 1;
+    for(auto sample_point: sample_points){
+        for(auto direction: line_directions){
+            visualizeCut(sample_point, direction, tag);
+            ++tag;
+        }
+    }
+}
+void DiscreteShell::visualizeCut(const TV sample_point, const TV line_direction, unsigned int line_tag){
+
+    iterateFaceSerial([&](int face_idx)
+    {
+        if(cut_coloring[face_idx] == line_tag) cut_coloring[face_idx] = 0;
+        FaceVtx vertices = getFaceVtxUndeformed(face_idx);
+        
+        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV cut_point_coordinate;
+        if(lineCutTriangle(x0, x1, x2, sample_point, line_direction, cut_point_coordinate)){
+            cut_coloring[face_idx] = line_tag;
+        }
+    });
+}
+
+// return if a line cut through a triangle and return the cut points' barycentric coordinate
+bool DiscreteShell::lineCutTriangle(const TV x1, const TV x2, const TV x3, const TV sample_point, const TV line_direction, TV &cut_point_coordinate){
+    
+    int count = 0;
+    cut_point_coordinate << -1, -1, -1;
+    std::vector<TV> points(3, TV::Zero());
+
+    TV2 r1 = solveLineIntersection(sample_point, line_direction, x3, x2);
+    TV2 r2 = solveLineIntersection(sample_point, line_direction, x2, x1);
+    TV2 r3 = solveLineIntersection(sample_point, line_direction, x1, x3);
+    if(r1(0) >= 0.-1e-6 && r1(0) <= 1.+1e-8) {++count; cut_point_coordinate(1) = r1(0);points[1] = x2 + r1(0)*(x3-x2);}
+    if(r2(0) >= 0.-1e-6 && r2(0) <= 1.+1e-8) {++count; cut_point_coordinate(0) = r2(0);points[0] = x1 + r2(0)*(x2-x1);}
+    if(r3(0) >= 0.-1e-6 && r3(0) <= 1.+1e-8) {++count; cut_point_coordinate(2) = r3(0);points[2] = x3 + r3(0)*(x1-x3);}
+    
+    // check if intersections are at the corners
+    for(int i = 0; i < 3; ++i){
+        for(int j = i+1; j < 3; ++j){
+            if(cut_point_coordinate(i) <= -1 || cut_point_coordinate(j) <= -1) continue;
+            if((points[i]-points[j]).norm() <= 1e-8) {
+                --count; cut_point_coordinate(j) = -1;
+            }
+        }
+    }
+    
+
+    if(count > 1) return true;
+    return false;
+
+}
+
+// find middle point of a cut segment through the triangle element
+Vector<T,3> DiscreteShell::middlePointoflineCutTriangle(const TV x1, const TV x2, const TV x3, const TV cut_point_coordinate){
+    
+    TV middle_point = TV::Zero();
+    if(cut_point_coordinate(0) >= 0.-1e-6 && cut_point_coordinate(0) <= 1.+1e-8) {middle_point += x1 + cut_point_coordinate(0)*(x2-x1);}
+    if(cut_point_coordinate(1) >= 0.-1e-6 && cut_point_coordinate(1) <= 1.+1e-8) {middle_point += x2 + cut_point_coordinate(1)*(x3-x2);}
+    if(cut_point_coordinate(2) >= 0.-1e-6 && cut_point_coordinate(2) <= 1.+1e-8) {middle_point += x3 + cut_point_coordinate(2)*(x1-x3);}
+
+    return middle_point/2;
+
+}
+
+// calculate strain in current cut segment using barycentric coordinate
+T DiscreteShell::strainInCut(const int face_idx, const TV cut_point_coordinate){
+
+    FaceVtx vertices = getFaceVtxDeformed(face_idx);
+    FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
+
+    TM cuts = TM::Zero();
+    TM cuts_undeformed = TM::Zero();
+    std::vector<int> recorder;
+    for(int i = 0; i < 3; ++i){
+        T cut_point = cut_point_coordinate(i);
+        if(cut_point >= 0.-1e-8 && cut_point <= 1.+1e-8) {
+            cuts.col(i) = vertices.row(i) + cut_point*(vertices.row((i+1)%3) - vertices.row(i));
+            cuts_undeformed.col(i) = undeformed_vertices.row(i) + cut_point*(undeformed_vertices.row((i+1)%3) - undeformed_vertices.row(i));
+            recorder.push_back(i);
+        }    
+    }
+    assert(recorder.size() == 2);
+    T l = (cuts.col(recorder.at(0)) - cuts.col(recorder.at(1))).norm();
+    T L0 = (cuts_undeformed.col(recorder.at(0)) - cuts_undeformed.col(recorder.at(1))).norm();
+
+    return 0.5*(l*l-L0*L0)/(L0*L0);
+}
+
+Vector<T,2> DiscreteShell::solveLineIntersection(const TV sample_point, const TV line_direction, const TV v1, const TV v2){
+    TV e = v1 - v2;
+    TV b; b << sample_point-v2;
+    Matrix<T, 3, 2> A; A.col(0) = e; A.col(1) = -line_direction;
+    TV2 r = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+    if(std::abs(e.normalized().transpose()*line_direction.normalized())-1 >= 0.-1e-8) r(0) = -1;
+
+    return r;
+}
+
+void DiscreteShell::testIsotropicStretch(){
+    deformed = 0.7 * undeformed;
+    computeStrainAndStressPerElement();
+    int A = 40;
+    TM vertices = getFaceVtxUndeformed(A);
+    sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+    std::cout << "Found stress tensor via Probing: \n" << findBestStressTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found stress tensor via Averaging: \n" << findBestStressTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated stress tensor at sample point triangle: \n" << cauchy_stress_tensors[A] << std::endl;
+    std::cout << "Found strain tensor via Probing: \n" << findBestStrainTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found strain tensor via Averaging: \n" << findBestStrainTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated strain tensor at sample point triangle: \n" << strain_tensors[A] << std::endl;
+}
+
+void DiscreteShell::testHorizontalDirectionStretch(){
+
+    for(int i = 0; i < deformed.size(); i +=3) deformed[i] = 0.7 * undeformed[i];
+    computeStrainAndStressPerElement();
+    int A = 40;
+    TM vertices = getFaceVtxUndeformed(A);
+    sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+    std::cout << "Found stress tensor via Probing: \n" << findBestStressTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found stress tensor via Averaging: \n" << findBestStressTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated stress tensor at sample point triangle: \n" << cauchy_stress_tensors[A] << std::endl;
+    std::cout << "Found strain tensor via Probing: \n" << findBestStrainTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found strain tensor via Averaging: \n" << findBestStrainTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated strain tensor at sample point triangle: \n" << strain_tensors[A] << std::endl;
+
+}
+
+void DiscreteShell::testVerticalDirectionStretch(){
+
+    int A = 0;
+    int B = deformed.size()/3/2;
+    for(int i = 1; i < deformed.size(); i +=3) deformed[i] = 0.7 * undeformed[i];
+    computeStrainAndStressPerElement();
+    TM vertices = getFaceVtxUndeformed(A);
+    sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+    sample[0] = triangleCenterofMass(getFaceVtxUndeformed(B));
+    std::cout << "Found strain tensor via Probing: \n" << findBestStrainTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found strain tensor via Averaging: \n" << findBestStrainTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated strain tensor at sample point triangle: \n" << strain_tensors[A] << std::endl;
+    std::cout << "Found stress tensor via Probing: \n" << findBestStressTensorviaProbing(sample[1], direction) << std::endl;
+    std::cout << "Found stress tensor via Averaging: \n" << findBestStressTensorviaAveraging(sample[1]) << std::endl;
+    std::cout << "Caculated stress tensor at sample point triangle: \n" << cauchy_stress_tensors[A] << std::endl;
+
+}
+
+std::vector<Matrix<T, 3, 3>> DiscreteShell::returnStrainTensors(int A){
+
+    TM vertices = getFaceVtxUndeformed(A);
+    auto CoM = triangleCenterofMass(vertices);
+    TM E = TM::Zero();
+    E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
+    // T x = triangleCenterofMass(vertices)(1);
+    // T e = 1e6;
+    // e = (1-x*1.5)*e;
+    // std::cout << A << " " << e << " " << findBestStrainTensorviaAveraging(CoM)(1,1) << std::endl;
+
+    return {strain_tensors.at(A), E, findBestStrainTensorviaAveraging(CoM)};
+}
+
+std::vector<Matrix<T, 3, 3>> DiscreteShell::returnStressTensors(int A){
+
+    TM vertices = getFaceVtxUndeformed(A);
+    auto CoM = triangleCenterofMass(vertices);
+
+    return {stress_tensors.at(A), findBestStressTensorviaProbing(CoM, direction), findBestStressTensorviaAveraging(CoM)};
+}
+
+void DiscreteShell::testSharedEdgeStress(int A, int B, int v1, int v2) {
+    
+    std::cout << "Quick test for edge stresses...\n";
+    TV edge = undeformed.segment<3>(v1*3) - undeformed.segment<3>(v2*3);
+    TV normal; normal << -edge(1), edge(0), 0; normal = normal.normalized();
+    std::cout << "normal direction: " << normal.transpose() << std::endl;
+    TV stress_1 = findBestStressTensorviaProbing(triangleCenterofMass(getFaceVtxUndeformed(A)), direction) *normal;
+    TV stress_2 = findBestStressTensorviaProbing(triangleCenterofMass(getFaceVtxUndeformed(B)), direction) *normal;
+    std::cout << "Kernel stress from triangle " << A << " : " << stress_1.transpose() << "\nKernel stress from triangle " << B << " : " << stress_2.transpose() << std::endl; 
+    stress_1 = stress_tensors[A]*normal;
+    stress_2 = stress_tensors[B]*normal;
+    std::cout << "Local stress from triangle " << A << " : " << stress_1.transpose() << "\nLocal stress from triangle " << B << " : " << stress_2.transpose() << std::endl; 
+    stress_1 = findBestStressTensorviaAveraging(triangleCenterofMass(getFaceVtxUndeformed(A))) *normal;
+    stress_2 = findBestStressTensorviaAveraging(triangleCenterofMass(getFaceVtxUndeformed(B))) *normal;
+    std::cout << "Average stress from triangle " << A << " : " << stress_1.transpose() << "\nAverage stress from triangle " << B << " : " << stress_2.transpose() << std::endl; 
+}
+
+void DiscreteShell::testStressTensors(int A, int B){
+
+    sample[0] = triangleCenterofMass(getFaceVtxUndeformed(A));
+    sample[1] = triangleCenterofMass(getFaceVtxUndeformed(B));
+    std::cout << "Tested triangle: " << A << std::endl;
+    std::cout << "Found stress tensor via Probing: \n" << findBestStressTensorviaProbing(sample[0], direction) << std::endl; 
+    std::cout << "Found stress tensor via Averaging: \n" << findBestStressTensorviaAveraging(sample[0]) << std::endl;
+    std::cout << "Caculated stress tensor at sample point triangle: \n" << stress_tensors[A].block(0,0,2,2)*optimization_homo_target_tensors[A].transpose()/areaRatio(A) << std::endl;
+    std::cout << "Found strain tensor via Probing: \n" << findBestStrainTensorviaProbing(sample[0], direction) << std::endl;
+    std::cout << "Found strain tensor via Averaging: \n" << findBestStrainTensorviaAveraging(sample[0]) << std::endl;
+    std::cout << "Caculated strain tensor at sample point triangle: \n" << strain_tensors[A] << std::endl;
+
+}
+
+T DiscreteShell::areaRatio(int A){
+    FaceVtx vertices = getFaceVtxDeformed(A);
+    FaceVtx undeformed_vertices = getFaceVtxUndeformed(A);
+
+    TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+    TV X0 = undeformed_vertices.row(0); 
+    TV X1 = undeformed_vertices.row(1); 
+    TV X2 = undeformed_vertices.row(2);
+
+    return ((x1-x0).cross(x2-x0)).norm() / ((X1-X0).cross(X2-X0)).norm();
+}
+
+int DiscreteShell::pointInTriangle(const TV sample_loc){
+
+    for (int i = 0; i < faces.rows()/3; i++){
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(i);
+
+        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
+        TM2 X; X.col(0) = (X1-X0).segment(0,2); X.col(1) = (X2-X0).segment(0,2); 
+        T denom = X.determinant();
+        X.col(0) = (X1-sample_loc).segment(0,2); X.col(1) = (X2-sample_loc).segment(0,2); 
+        T alpha = X.determinant()/denom;
+        X.col(0) = (X1-X0).segment(0,2); X.col(1) = (sample_loc-X0).segment(0,2); 
+        T beta = X.determinant()/denom;
+        T gamma = 1-alpha-beta;
+
+        if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+            return i;  // Return the index of the containing triangle
+        }
+    }
+
+    return -1;
+}
+std::vector<Vector<T, 3>> DiscreteShell::pointInDeformedTriangle(){
+    std::vector<TV> update;
+    for(auto sample_loc: sample){
+        update.push_back(pointInDeformedTriangle(sample_loc));
+    }
+
+    return update;
+}
+Vector<T, 3> DiscreteShell::pointInDeformedTriangle(const TV sample_loc){
+
+    for (int i = 0; i < faces.rows()/3; i++){
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(i);
+
+        TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
+        TM2 X; X.col(0) = (X1-X0).segment(0,2); X.col(1) = (X2-X0).segment(0,2); 
+        T denom = X.determinant();
+        X.col(0) = (X1-sample_loc).segment(0,2); X.col(1) = (X2-sample_loc).segment(0,2); 
+        T alpha = X.determinant()/denom;
+        X.col(0) = (X1-X0).segment(0,2); X.col(1) = (sample_loc-X0).segment(0,2); 
+        T beta = X.determinant()/denom;
+        T gamma = 1-alpha-beta;
+
+        if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+            FaceVtx vertices = getFaceVtxDeformed(i);
+            TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+            return alpha*x0 + gamma*x1 + beta*x2;  
+        }
+    }
+
+    return TV::Zero();
+}
