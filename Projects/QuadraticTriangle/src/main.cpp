@@ -1,16 +1,16 @@
 #include "polyscope/polyscope.h"
 #include "polyscope/surface_mesh.h"
 #include <igl/readOBJ.h>
-#include "../include/DiscreteShell.h"
+#include "../include/QuadraticTriangle.h"
 #include "../include/App.h"
 
 int main()
 {
-    DiscreteShell discrete_shell;
+    QuadraticTriangle discrete_shell;
 
-    discrete_shell.initializeFromFile("../../../Projects/DiscreteShell/data/grid.obj");
-    // discrete_shell.initializeFromFile("../../../Projects/DiscreteShell/data/grid_double_refined.obj");
-    // discrete_shell.initializeFromFile("../../../Projects/Dis/creteShell/data/grid_refined_mesh.obj");
+    // discrete_shell.initializeFromFile("../../../Projects/QuadraticTriangle/data/grid.obj");
+    discrete_shell.initializeFromFile("../../../Projects/QuadraticTriangle/data/grid_double_refined.obj");
+    // discrete_shell.initializeFromFile("../../../Projects/QuadraticTriangle/data/grid_refined_mesh.obj");
 
     // discrete_shell.testIsotropicStretch();
     // discrete_shell.testVerticalDirectionStretch();
@@ -21,7 +21,7 @@ int main()
     // while(!finished) finished = discrete_shell.advanceOneStep(static_solve_step++);
 
     
-    App<DiscreteShell> app(discrete_shell);
+    App<QuadraticTriangle> app(discrete_shell);
     // discrete_shell.setEssentialBoundaryCondition(displacement[0], displacement[1]);
 
     app.initializeScene();

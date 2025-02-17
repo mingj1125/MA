@@ -471,7 +471,7 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     window_height = 5;
 
     T shell_len = max_corner(1) - min_corner(1);
-    T displacement = -0.1*shell_len;
+    T displacement = -0.01*shell_len;
 
     if (!set_window) { // if no window testing required we stretch sheet
    
