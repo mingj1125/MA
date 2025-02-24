@@ -1,17 +1,4 @@
-#include <Eigen/CholmodSupport>
-#include <igl/readOBJ.h>
-#include <igl/massmatrix.h>
-#include <Spectra/SymEigsShiftSolver.h>
-#include <Spectra/MatOp/SparseSymShiftSolve.h>
-#include <Spectra/SymEigsSolver.h>
-#include <Spectra/MatOp/SparseSymMatProd.h>
-
-#include "../autodiff/Quadratic2DShell.h"
 #include "../include/QuadraticTriangle.h"
-
-#include <cmath> // for pi in cut directions
-#include <random> // for rng in sampling for stress probing
-#include <set>
 
 // assume planar case for now
 void QuadraticTriangle::setProbingLineDirections(unsigned int num_directions){
@@ -95,7 +82,7 @@ Matrix<T, 2, 2> QuadraticTriangle::findBestStrainTensorviaProbing(const TV sampl
 }
 
 Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaAveraging(const TV sample_loc){
-    T pi = std::acos(-1);
+    T pi = M_PI;
     T std = 7e-3;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
     auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
@@ -124,7 +111,7 @@ Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaAveraging(const TV sam
 }
 
 Matrix<T, 3, 3> QuadraticTriangle::findBestStrainTensorviaAveraging(const TV sample_loc){
-    T pi = std::acos(-1);
+    T pi = M_PI;
     T std = 7e-3;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
     auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
@@ -150,18 +137,6 @@ Matrix<T, 3, 3> QuadraticTriangle::findBestStrainTensorviaAveraging(const TV sam
 }
 
 Vector<T, 3> QuadraticTriangle::computeWeightedStress(const TV sample_loc, TV direction){
-    T pi = std::acos(-1);
-    T std = 7e-3;
-    int choose_gaussian_kernel = 1;
-    auto gaussian_kernel1 = [pi, std](T distance){
-        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
-    };
-    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
-    auto gaussian_kernel2 = [pi, variance_matrix](TV sample_loc, TV CoM){
-        TV2 dist = (CoM-sample_loc).segment(0,2);
-        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
-        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
-    };
     T sum = 0.;
     TV stress = TV::Zero();
     TV direction_normal; direction_normal << direction(1), -direction(0), 0;
@@ -169,26 +144,16 @@ Vector<T, 3> QuadraticTriangle::computeWeightedStress(const TV sample_loc, TV di
 
     iterateFaceSerial([&](int face_idx)
     {
-        FaceVtx vertices = getFaceVtxUndeformed(face_idx).block(0,0,3,3);
+        FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx).block(0,0,3,3);
         
-        TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+        TV x0 = undeformed_vertices.row(0); TV x1 = undeformed_vertices.row(1); TV x2 = undeformed_vertices.row(2);
         TV cut_point_coordinate;
         if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
-            TV middle = middlePointoflineCutTriangle(x0, x1, x2, cut_point_coordinate);
-            if(choose_gaussian_kernel == 1){
-                T distance = (sample_loc - middle).norm();
-                stress += gaussian_kernel1(distance) * stress_tensors[face_idx] * direction_normal;
-                sum += gaussian_kernel1(distance);
-
-                // visulization
-                if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_prob[face_idx] = gaussian_kernel1(distance);
-            } else if(choose_gaussian_kernel == 2){
-                stress += gaussian_kernel2(sample_loc, middle) * stress_tensors[face_idx] * direction_normal;
-                sum += gaussian_kernel2(sample_loc, middle);
-
-                // visulization
-                if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_prob[face_idx] = gaussian_kernel2(sample_loc, middle);
-            }
+            Vector<T,4> res = evaluatePerTriangleStress(getFaceVtxDeformed(face_idx), getFaceVtxUndeformed(face_idx), 
+            cut_point_coordinate, direction_normal, sample_loc);
+            stress += res.segment<3>(0);
+            sum += res(3);
+            if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_prob[face_idx] = res(3);
             
         }
     });
@@ -198,18 +163,6 @@ Vector<T, 3> QuadraticTriangle::computeWeightedStress(const TV sample_loc, TV di
 }
 
 T QuadraticTriangle::computeWeightedStrain(const TV sample_loc, TV direction){
-    T pi = std::acos(-1);
-    T std = 7e-3;
-    int choose_gaussian_kernel = 1;
-    auto gaussian_kernel1 = [pi, std](T distance){
-        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
-    };
-    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
-    auto gaussian_kernel2 = [pi, variance_matrix](TV sample_loc, TV CoM){
-        TV2 dist = (CoM-sample_loc).segment(0,2);
-        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
-        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
-    };
     T sum = 0.;
     T strain = 0;
 
@@ -222,24 +175,10 @@ T QuadraticTriangle::computeWeightedStrain(const TV sample_loc, TV direction){
         TV cut_point_coordinate;
         bool compute_with_segments = true;
         if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
-            TV middle = middlePointoflineCutTriangle(x0, x1, x2, cut_point_coordinate);
-            // if((sample_loc-sample[1]).norm() <= 1e-4) {std::cout << "triangle "<< face_idx << " has strain : " << 
-            //         strainInCut(face_idx, cut_point_coordinate) << " in direction: " << direction.transpose()<< 
-            //         " with cut in " << cut_point_coordinate.transpose() << std::endl; 
-            //         }
-            if(choose_gaussian_kernel == 1){
-                T distance = (sample_loc - middle).norm();
-                if(compute_with_segments)
-                    strain += gaussian_kernel1(distance)*strainInCut(face_idx, cut_point_coordinate);
-                else strain += gaussian_kernel1(distance)*direction.transpose()*strain_tensors[face_idx]*direction;    
-                sum += gaussian_kernel1(distance);
-
-            } else if(choose_gaussian_kernel == 2){
-                if(compute_with_segments)
-                    strain += gaussian_kernel2(sample_loc, middle)*strainInCut(face_idx, cut_point_coordinate);
-                else gaussian_kernel2(sample_loc, middle)*direction.transpose()*strain_tensors[face_idx]*direction; 
-                sum += gaussian_kernel2(sample_loc, middle);
-            }
+            TV2 res = evaluatePerTriangleStrain(getFaceVtxDeformed(face_idx), getFaceVtxUndeformed(face_idx), 
+            cut_point_coordinate, direction, sample_loc);
+            strain += res(0);
+            sum += res(1);
         }
     });
 

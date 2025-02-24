@@ -94,8 +94,8 @@ bool QuadraticTriangle::advanceOneStep(int step)
         {   
             computeStrainAndStressPerElement();
             // Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(1288);
-            Matrix<T, 3, 3> vertices = getFaceVtxUndeformed(60).block(0,0,3,3);
-            sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
+            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(60);
+            sample[1] = vertices.transpose()*get_shape_function(0.6, 0.2); 
             // TM E = TM::Zero();
             // TV CoM = {-0.21, 0.185, 0};
             // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
@@ -397,7 +397,6 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
     cauchy_stress_tensors = std::vector<TM>(F.rows());
 
     strain_tensors = std::vector<TM>(F.rows());
-    space_strain_tensors = std::vector<TM2>(F.rows()); 
     defomation_gradients = std::vector<TM>(F.rows()); 
 
     cut_coloring = VectorXi::Zero(F.rows());
@@ -867,16 +866,28 @@ void QuadraticTriangle::setEssentialBoundaryCondition(T displacement_x, T displa
 
 std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStrainTensors(int A){
 
-    TM vertices = getFaceVtxUndeformed(A).block(0,0,3,3);
-    auto CoM = triangleCenterofMass(vertices);
-    TM E = TM::Zero();
-    E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
-    // T x = triangleCenterofMass(vertices)(1);
-    // T e = 1e6;
-    // e = (1-x*1.5)*e;
-    // std::cout << A << " " << e << " " << findBestStrainTensorviaAveraging(CoM)(1,1) << std::endl;
+    Matrix<T, 6, 3> undeformed_vertices = getFaceVtxUndeformed(A);
+    T a = lambda, b = mu;
+    T beta_1 = 1/3.; T beta_2 = 1/3.;
+    // std::random_device r;
+    // // Choose a random mean between 1 and 6
+    // std::default_random_engine e1(r());
+    // std::uniform_real_distribution<> dis(-0.15, 0.1);
+    // beta_1 += dis(e1);
+    // beta_2 += dis(e1);
+    // beta_1 = std::min(1., beta_1);
+    // beta_1 = std::max(0., beta_1);
+    // beta_2 = std::min(1., beta_2);
+    // beta_2 = std::max(0., beta_2);
+    Matrix<T,6,1> N = get_shape_function(beta_1, beta_2);
+    TV X = undeformed_vertices.transpose() * N;
+    if(heterogenuous) setMaterialParameter(E, nu, a, b, X);
+    
+    TM strain_fit = TM::Zero();
+    strain_fit.block(0,0,2,2) = findBestStrainTensorviaProbing(X, direction);
+    // std::cout << A << " " << X(1) << " " << strain_fit(1,1) << std::endl;
 
-    return {strain_tensors.at(A), E, findBestStrainTensorviaAveraging(CoM)};
+    return {strain_tensors.at(A), strain_fit, findBestStrainTensorviaAveraging(X)};
 }
 
 std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStressTensors(int A){
@@ -885,18 +896,6 @@ std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStressTensors(int A){
     auto CoM = triangleCenterofMass(vertices);
 
     return {stress_tensors.at(A), findBestStressTensorviaProbing(CoM, direction), findBestStressTensorviaAveraging(CoM)};
-}
-
-T QuadraticTriangle::areaRatio(int A){
-    FaceVtx vertices = getFaceVtxDeformed(A).block(0,0,3,3);
-    FaceVtx undeformed_vertices = getFaceVtxUndeformed(A).block(0,0,3,3);
-
-    TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-    TV X0 = undeformed_vertices.row(0); 
-    TV X1 = undeformed_vertices.row(1); 
-    TV X2 = undeformed_vertices.row(2);
-
-    return ((x1-x0).cross(x2-x0)).norm() / ((X1-X0).cross(X2-X0)).norm();
 }
 
 Vector<T, 3> QuadraticTriangle::triangleCenterofMass(FaceVtx vertices){
@@ -937,7 +936,7 @@ std::vector<Vector<T, 3>> QuadraticTriangle::pointInDeformedTriangle(){
 
 Vector<T, 3> QuadraticTriangle::pointInDeformedTriangle(const TV sample_loc){
 
-    for (int i = 0; i < faces.rows()/3; i++){
+    for (int i = 0; i < faces.rows(); i++){
         FaceVtx undeformed_vertices = getFaceVtxUndeformed(i).block(0,0,3,3);
 
         TV X0 = undeformed_vertices.row(0); TV X1 = undeformed_vertices.row(1); TV X2 = undeformed_vertices.row(2);
@@ -950,11 +949,76 @@ Vector<T, 3> QuadraticTriangle::pointInDeformedTriangle(const TV sample_loc){
         T gamma = 1-alpha-beta;
 
         if (alpha >= 0 && beta >= 0 && gamma >= 0) {
-            FaceVtx vertices = getFaceVtxDeformed(i).block(0,0,3,3);
-            TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
-            return alpha*x0 + gamma*x1 + beta*x2;  
+            // FaceVtx vertices = getFaceVtxDeformed(i).block(0,0,3,3);
+            // TV x0 = vertices.row(0); TV x1 = vertices.row(1); TV x2 = vertices.row(2);
+            // return alpha*x0 + gamma*x1 + beta*x2;  
+            // std::cout << i << std::endl;
+            TV2 bary = findBarycentricCoord(sample_loc, getFaceVtxUndeformed(i));
+            if(bary(0) >= 0){
+                // std::cout << "Found with bary: \n" << bary.transpose() << std::endl;
+                Matrix<T, 6, 3> vertices = getFaceVtxDeformed(i);
+                return vertices.transpose() * get_shape_function(bary(0), bary(1));
+            }
         }
     }
 
     return TV::Zero();
+}
+
+Matrix<T, 2, 2> dXdbeta(Vector<T, 2> beta, const Matrix<T,6,3> undeformed_vertices){
+    T p[12];
+    p[0] = undeformed_vertices(0,0); p[1] = undeformed_vertices(0,1);
+    p[2] = undeformed_vertices(1,0); p[3] = undeformed_vertices(1,1);
+    p[4] = undeformed_vertices(2,0); p[5] = undeformed_vertices(2,1);
+    p[6] = undeformed_vertices(3,0); p[7] = undeformed_vertices(3,1);
+    p[8] = undeformed_vertices(4,0); p[9] = undeformed_vertices(4,1);
+    p[10] = undeformed_vertices(5,0); p[11] = undeformed_vertices(5,1);
+    T t1 = 0.2e1;
+    T t2 = -t1 * (beta[0] + beta[1]) + 0.1e1;
+    T t3 = 0.1e1 - beta[0] - beta[1];
+    T t4 = t1 * beta[0] - 0.1e1;
+    T t5 = t3 * p[0];
+    T t6 = beta[0] - t3;
+    T t7 = t2 * p[0];
+    T t8 = -0.4e1;
+    T t9 = t1 * beta[1] - 0.1e1;
+    T t10 = beta[1] - t3;
+    t3 = t3 * p[1];
+    t2 = t2 * p[1];
+    Matrix<T, 2, 2> dXdbeta;
+    dXdbeta(0,0) = t1 * (beta[0] * p[2] - t5) + t8 * (t6 * p[6] + (p[8] - p[10]) * beta[1]) + t4 * p[2] - t7;
+    dXdbeta(0,1) = t1 * (beta[1] * p[4] - t5) + t8 * (t10 * p[8] + (p[6] - p[10]) * beta[0]) + t9 * p[4] - t7;
+    dXdbeta(1,0) = t1 * (beta[0] * p[3] - t3) + t8 * (t6 * p[7] + (p[9] - p[11]) * beta[1]) + t4 * p[3] - t2;
+    dXdbeta(1,1) = t1 * (beta[1] * p[5] - t3) + t8 * (t10 * p[9] + (p[7] - p[11]) * beta[0]) + t9 * p[5] - t2;
+    return dXdbeta;
+}
+
+Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,6,3> undeformed_vertices){
+    TV2 bary(0.3, 0.3);
+    Matrix<T, 2, 2> dXdbary = dXdbeta(bary, undeformed_vertices);
+    double learning_rate = 20.5;
+    double tol = 1e-8;
+    int maxIter = 1000;
+    bool converged = false;
+    for (int iter = 0; iter < maxIter; ++iter) {
+        TV2 grad;
+        Matrix<T, 6, 1> N = get_shape_function(bary(0), bary(1));
+        TV X_current = undeformed_vertices.transpose()*N;
+        grad = 2*(((X_current-X).segment<2>(0)).transpose() * dXdbary);
+        // Gradient descent update
+        bary -= learning_rate * grad;
+
+        // Ensure barycentric coordinates are valid
+        bary = bary.cwiseMax(0.0).cwiseMin(1.0);
+
+        if (grad.norm() < tol) {
+            converged = true;
+            break;
+        }
+    }
+    if (!converged){
+        // bary(0) = -1;
+        std::cout << "Not found with bary: \n" << bary.transpose() << std::endl;
+    }
+    return bary;
 }

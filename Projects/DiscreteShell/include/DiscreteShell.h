@@ -123,7 +123,7 @@ public:
     std::vector<TV> direction;
 
     // ============================= Heterogenuous material ==============================
-    bool heterogenuous = false;
+    bool heterogenuous = true;
     VectorXT nu_visualization;
     VectorXT E_visualization;
 

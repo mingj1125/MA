@@ -33,6 +33,17 @@ std::vector<QuadraturePoint> get_6_point_gaussian_quadrature() {
     // };
 }
 
+Matrix<T, 6, 1> QuadraticTriangle::get_shape_function(T beta_1, T beta_2){
+    Matrix<T, 6, 1> N;
+    N(0) = (1-beta_1-beta_2)*(1-2*beta_1-2*beta_2);
+    N(1) = beta_1*(2*beta_1-1);
+    N(2) = beta_2*(2*beta_2-1);
+    N(3) = 4*beta_1*(1-beta_1-beta_2);
+    N(4) = 4*beta_2*(1-beta_1-beta_2);
+    N(5) = 4*beta_1*beta_2;
+    return N;
+}
+
 Vector<T, 18> QuadraticTriangle::compute2DQuadraticShellEnergyGradient(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices){
         
     Vector<T, 18> gradient; gradient.setZero();
@@ -42,7 +53,8 @@ Vector<T, 18> QuadraticTriangle::compute2DQuadraticShellEnergyGradient(const Mat
     for(const auto& point: quadrature_points){
         T local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);
         T local_mu = E / 2.0 / (1.0 + nu);
-        TV X = undeformed_vertices.row(0) * point.xi + undeformed_vertices.row(1) * point.eta + undeformed_vertices.row(2) * (1-point.eta-point.xi);
+        Matrix<T,6,1> N = get_shape_function(point.xi, point.eta);
+        TV X = undeformed_vertices.transpose() * N;
         if(heterogenuous) setMaterialParameter(E, nu, local_lambda, local_mu, X);
         gradient += computePointEnergyDensityGradient(local_lambda, local_mu, vertices, undeformed_vertices, {point.xi, point.eta}) * point.weight;
     }
@@ -58,7 +70,8 @@ T QuadraticTriangle::compute2DQuadraticShellEnergy(const Matrix<T,6,3> & vertice
     for(const auto& point: quadrature_points){
         T local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);
         T local_mu = E / 2.0 / (1.0 + nu);
-        TV X = undeformed_vertices.row(0) * point.xi + undeformed_vertices.row(1) * point.eta + undeformed_vertices.row(2) * (1-point.eta-point.xi);
+        Matrix<T,6,1> N = get_shape_function(point.xi, point.eta);
+        TV X = undeformed_vertices.transpose() * N;
         if(heterogenuous) setMaterialParameter(E, nu, local_lambda, local_mu, X);
         energy += computePointEnergyDensity(local_lambda, local_mu, vertices, undeformed_vertices, {point.xi, point.eta}) * point.weight;
     }
@@ -76,7 +89,8 @@ Matrix<T, 18, 18> QuadraticTriangle::compute2DQuadraticShellEnergyHessian(const 
     for(const auto& point: quadrature_points){
         T local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);
         T local_mu = E / 2.0 / (1.0 + nu);
-        TV X = undeformed_vertices.row(0) * point.xi + undeformed_vertices.row(1) * point.eta + undeformed_vertices.row(2) * (1-point.eta-point.xi);
+        Matrix<T,6,1> N = get_shape_function(point.xi, point.eta);
+        TV X = undeformed_vertices.transpose() * N;
         if(heterogenuous) setMaterialParameter(E, nu, local_lambda, local_mu, X);
         hessian += computePointEnergyDensityHessian(local_lambda, local_mu, vertices, undeformed_vertices, {point.xi, point.eta}) * point.weight;
     }

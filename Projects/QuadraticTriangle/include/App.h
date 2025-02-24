@@ -32,7 +32,7 @@ public:
 public:
     void initializeScene()
     {
-        polyscope::options::autocenterStructures = true;
+        // polyscope::options::autocenterStructures = true;
         polyscope::view::windowWidth = 3000;
         polyscope::view::windowHeight = 2000;
         polyscope::options::groundPlaneMode = polyscope::GroundPlaneMode::ShadowOnly;
@@ -113,7 +113,7 @@ public:
         {
             bool finished = simulation.advanceOneStep(static_solve_step++);
 
-            auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
+            if(finished){auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
             auto strain_yy = std::vector<T> (simulation.strain_tensors.size());
             auto strain_xy = std::vector<T> (simulation.strain_tensors.size());
             for(int k = 0; k < simulation.strain_tensors.size(); ++k){
@@ -184,7 +184,7 @@ public:
             psMesh->updateVertexPositions(meshV);
             Eigen::MatrixXd ext_force;
             vectorToIGLMatrix<T, 3>(simulation.external_force, ext_force);
-            psMesh->addVertexVectorQuantity("external forces", ext_force);
+            psMesh->addVertexVectorQuantity("external forces", ext_force);}
 
             if (finished)
                 run_sim = false;

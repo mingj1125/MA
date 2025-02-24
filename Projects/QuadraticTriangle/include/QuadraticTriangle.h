@@ -82,7 +82,6 @@ public:
     // ============================= Strain Tensor Utilities ============================
 
     std::vector<TM> strain_tensors;
-    std::vector<TM2> space_strain_tensors; // local 2D coodinate strain without transformation
     std::vector<TM> defomation_gradients;
 
     // ============================= Kernel-weighted Cut Utilities ======================
@@ -357,12 +356,11 @@ public:
     void computeBoundingBox(TV& min_corner, TV& max_corner);
 
     // ============================= Stress Tensor Utilities ============================
-    Matrix<T, 3, 2> computeDeformationGradientwrt2DXSpace(const TV X1, const TV X2, const TV X3, const TV x1, const TV x2, const TV x3);
-    Matrix<T, 2, 3> computeBarycentricJacobian(const TV X1, const TV X2, const TV X3);
-    Matrix<T, 2, 2> computeCauchyStrainwrt2dXSpace(Matrix<T, 3, 2> F);
     void computeStrainAndStressPerElement();
-    void computeHomogenization();
-    void computeEnergyComparison();
+    Vector<T, 4> evaluatePerTriangleStress(const Matrix<T, 6, 3> vertices, const Matrix<T, 6, 3> undeformed_vertices, 
+        const TV cut_point_coordinate, const TV direction_normal, const TV sample_loc);
+    Vector<T, 2> evaluatePerTriangleStrain(const Matrix<T, 6, 3> vertices, const Matrix<T, 6, 3> undeformed_vertices, 
+        const TV cut_point_coordinate, const TV direction, const TV sample_loc);
 
     // ============================= Boundary Utilities =================================
     void setEssentialBoundaryCondition(T displacement_x, T displacement_y);
@@ -392,13 +390,14 @@ public:
     std::vector<Matrix<T, 3, 3>> returnStressTensors(int A);
     std::vector<Matrix<T, 3, 3>> returnStrainTensors(int A);
 
-    T areaRatio(int A);
     Vector<T, 3> triangleCenterofMass(FaceVtx vertices);
     int pointInTriangle(const TV sample_loc);
     std::vector<Vector<T, 3>> pointInDeformedTriangle();
     Vector<T, 3> pointInDeformedTriangle(const TV sample_loc);
+    Vector<T, 2> findBarycentricCoord(const TV X, const Matrix<T,6,3> undeformed_vertices);
 
     // =============================== Quadratic Energy ==================================
+    Matrix<T, 6, 1> get_shape_function(T beta_1, T beta_2);
     Vector<T, 18> compute2DQuadraticShellEnergyGradient(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);
     T compute2DQuadraticShellEnergy(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);	
     Matrix<T, 18, 18> compute2DQuadraticShellEnergyHessian(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);		

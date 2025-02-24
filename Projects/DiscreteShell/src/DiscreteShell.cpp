@@ -2156,10 +2156,10 @@ std::vector<Matrix<T, 3, 3>> DiscreteShell::returnStrainTensors(int A){
     auto CoM = triangleCenterofMass(vertices);
     TM E = TM::Zero();
     E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
-    // T x = triangleCenterofMass(vertices)(1);
-    // T e = 1e6;
-    // e = (1-x*1.5)*e;
-    // std::cout << A << " " << e << " " << findBestStrainTensorviaAveraging(CoM)(1,1) << std::endl;
+    T x = triangleCenterofMass(vertices)(1);
+    T e = 1e6;
+    e = (1-x*1.5)*e;
+    std::cout << A << " " << e << " " << E(1,1) << std::endl;
 
     return {strain_tensors.at(A), E, findBestStrainTensorviaAveraging(CoM)};
 }
