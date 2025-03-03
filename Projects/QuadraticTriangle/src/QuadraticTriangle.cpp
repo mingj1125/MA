@@ -17,16 +17,19 @@
 #include <map> 
 #include <algorithm>
 
-void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X){
+void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X, int face_idx){
     // nu = 0.45;
-    nu = 0.;
+    nu = 0.; 
     E = 1e6;
-    // nu = (1-(face_idx%10)/10.)*nu;
-    // E = (1-(face_idx/18)/10.)*E;
-    // FaceVtx undeformed_vertices = getFaceVtxUndeformed(face_idx);
-    // T x = 0.5*(undeformed_vertices.col(1).minCoeff()+undeformed_vertices.col(1).maxCoeff());
-    T x = X(1);
-    E = (1-x*1.5)*E;
+    if(tags && heterogenuous) {
+        if(face_tags(face_idx) == 0) E /= 200;
+        else if(face_tags(face_idx)%2==0){
+            E /= 10;
+        }
+    } else if(heterogenuous){
+        T x = X(1);
+        E = (1-x*1.5)*E;
+    }
     local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);;
     local_mu = E / 2.0 / (1.0 + nu);
 }
@@ -67,14 +70,7 @@ bool QuadraticTriangle::advanceOneStep(int step)
     {
         std::cout << "=================== Time STEP " << step * dt << "s===================" << std::endl;
         bool finished = advanceOneTimeStep();
-        // updateDynamicStates();
-        // computeStrainAndStressPerElement();
-        // computeHomogenization();
-        // TM vertices = getFaceVtxUndeformed(10);
-        // sample[0] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
-        // vertices = getFaceVtxUndeformed(60);
-        // sample[1] << vertices.col(0).mean(), vertices.col(1).mean(), vertices.col(2).mean(); 
-        // visualizeCuts(sample, direction);
+        updateDynamicStates();
         if (step * dt > simulation_duration)
         {
             return true;
@@ -94,8 +90,10 @@ bool QuadraticTriangle::advanceOneStep(int step)
         {   
             computeStrainAndStressPerElement();
             // Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(1288);
-            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(60);
-            sample[1] = vertices.transpose()*get_shape_function(0.6, 0.2); 
+            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(436);
+            sample[1] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
+            vertices = getFaceVtxUndeformed(0);
+            sample[0] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
             // TM E = TM::Zero();
             // TV CoM = {-0.21, 0.185, 0};
             // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
@@ -336,11 +334,35 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
 {
     MatrixXT V; MatrixXi F;
     igl::readOBJ(filename, V, F);
+    face_tags = VectorXi(F.rows()); face_tags.setZero();
+    if(tags) {
+        std::string tag_file = "../../../Projects/QuadraticTriangle/data/sun_mesh_line_face_tags.csv";
+        std::ifstream file(tag_file); // Open the file
+        if (!file.is_open()) {
+            std::cerr << "Error: Could not open tag file!" << std::endl;
+        }
+
+        std::string l;
+        std::vector<int> ftags;
+        face_tags = VectorXi(F.rows());
+        int count = 0;
+
+        while (std::getline(file, l)) {
+            try {
+                int tag = std::stoi(l); // Convert string to integer
+                face_tags(count) = tag; ++count;
+            } catch (const std::exception& e) {
+                std::cerr << "Error converting line to integer: " << l << std::endl;
+            }
+        }
+  
+        // std::cout << face_tags.size() << " " << face_tags[118] << std::endl;
+    }
 
     TV min_corner = V.colwise().minCoeff();
     TV max_corner = V.colwise().maxCoeff();
 
-    T bb_diag = (max_corner - min_corner).norm();
+    T bb_diag = max_corner(1) - min_corner(1);
 
     V *= 1.0 / bb_diag;
 
@@ -436,20 +458,33 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
 
     // Essential BC (displacement)
 
-    T shell_len = max_corner(1) - min_corner(1);
-    T displacement = -0.01*shell_len;
+    if (set_boundary_condition){
+        T shell_len = max_corner(1) - min_corner(1);
+        T displacement = -0.01*shell_len;
 
-    for (int j = 0; j < undeformed.size()/3; j++)
-    {
-        if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-5){
-            for (int d = 0; d < 3; d++)
-            {   
-                // if(d == 0) continue;
-                dirichlet_data[j * 3 + d] = 0.;
+        for (int j = 0; j < undeformed.size()/3; j++)
+        {
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-5){
+                for (int d = 0; d < 3; d++)
+                {   
+                    if(d == 0) continue;
+                    dirichlet_data[j * 3 + d] = 0.;
+                }
+            }
+        }
+        for (int j = 0; j < undeformed.size()/3; j++)
+        {
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-5){
+                u[j * 3 + 1] = displacement;
+                u[j * 3] = 0;
+                for (int d = 0; d < 3; d++)
+                {   
+                    if(d == 0) continue;
+                    dirichlet_data[j * 3 + d] = 0.;
+                }
             }
         }
     }
-    setEssentialBoundaryCondition(0, displacement);
 
     nu_visualization = VectorXT::Zero(F.rows());
     E_visualization = VectorXT::Zero(F.rows());
@@ -477,7 +512,7 @@ void QuadraticTriangle::addShellInplaneEnergy(T& energy)
         Matrix<T, 6, 3> undeformed_vertices = getFaceVtxUndeformed(face_idx);
         Vector<int, 6> indices = faces.row(face_idx);
 
-        energy += compute2DQuadraticShellEnergy(vertices, undeformed_vertices);
+        energy += compute2DQuadraticShellEnergy(vertices, undeformed_vertices, face_idx);
     });
 }
 
@@ -498,11 +533,7 @@ void QuadraticTriangle::addShellInplaneForceEntries(VectorXT& residual)
         Vector<int, 6> indices = faces.row(face_idx);
        
         Vector<T, 18> dedx;
-        dedx = compute2DQuadraticShellEnergyGradient(vertices, undeformed_vertices);
-        T a, b;
-        if(heterogenuous) setMaterialParameter(E, nu, a, b, triangleCenterofMass(undeformed_vertices.block(0,0,3,3)));
-        nu_visualization[face_idx] = nu;
-        E_visualization[face_idx] = E;
+        dedx = compute2DQuadraticShellEnergyGradient(vertices, undeformed_vertices, face_idx);
         
         addForceEntry<3>(residual, {indices[0],indices[1],indices[2],indices[3],indices[4],indices[5]}, -dedx);
     });
@@ -522,7 +553,7 @@ void QuadraticTriangle::addShellInplaneHessianEntries(std::vector<Entry>& entrie
         Vector<int, 6> indices = faces.row(face_idx);
 
         Matrix<T, 18, 18> hessian;
-        hessian = compute2DQuadraticShellEnergyHessian(vertices, undeformed_vertices);
+        hessian = compute2DQuadraticShellEnergyHessian(vertices, undeformed_vertices, face_idx);
         // if(face_idx == 0) std::cout << hessian << "\n and \n" << compute2DQuadraticShellEnergyHessian(nu, E, thickness, x0, x1, x2, X0, X1, X2) << std::endl;
 
         addHessianEntry<3, 3>(entries, {indices[0],indices[1],indices[2],indices[3],indices[4],indices[5] }, hessian);
@@ -844,26 +875,6 @@ void QuadraticTriangle::computeConsistentMassMatrix(const FaceVtx& vtx_pos, Matr
 }
 // ============================= Dynamics End =============================
 
-// ============================= Boundary Utilities =================================
-
-// assume for now I only set explicit BC for the lower boundary (node_idx 0-9)
-void QuadraticTriangle::setEssentialBoundaryCondition(T displacement_x, T displacement_y){
-
-    for (int j = 0; j < undeformed.size()/3; j++)
-    {
-        if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= 0){
-            u[j * 3 + 1] = displacement_y;
-            u[j * 3] = displacement_x;
-            for (int d = 0; d < 3; d++)
-            {   
-                // if(d == 0) continue;
-                dirichlet_data[j * 3 + d] = 0.;
-            }
-        }
-    }
-
-}
-
 std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStrainTensors(int A){
 
     Matrix<T, 6, 3> undeformed_vertices = getFaceVtxUndeformed(A);
@@ -881,7 +892,7 @@ std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStrainTensors(int A){
     // beta_2 = std::max(0., beta_2);
     Matrix<T,6,1> N = get_shape_function(beta_1, beta_2);
     TV X = undeformed_vertices.transpose() * N;
-    if(heterogenuous) setMaterialParameter(E, nu, a, b, X);
+    if(heterogenuous) setMaterialParameter(E, nu, a, b, X, A);
     
     TM strain_fit = TM::Zero();
     strain_fit.block(0,0,2,2) = findBestStrainTensorviaProbing(X, direction);
@@ -894,8 +905,10 @@ std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStressTensors(int A){
 
     TM vertices = getFaceVtxUndeformed(A).block(0,0,3,3);
     auto CoM = triangleCenterofMass(vertices);
+    TM stress_fit = TM::Zero();
+    stress_fit = findBestStressTensorviaProbing(CoM, direction);
 
-    return {stress_tensors.at(A), findBestStressTensorviaProbing(CoM, direction), findBestStressTensorviaAveraging(CoM)};
+    return {stress_tensors.at(A), stress_fit, findBestStressTensorviaAveraging(CoM)};
 }
 
 Vector<T, 3> QuadraticTriangle::triangleCenterofMass(FaceVtx vertices){
@@ -996,22 +1009,35 @@ Matrix<T, 2, 2> dXdbeta(Vector<T, 2> beta, const Matrix<T,6,3> undeformed_vertic
 Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,6,3> undeformed_vertices){
     TV2 bary(0.3, 0.3);
     Matrix<T, 2, 2> dXdbary = dXdbeta(bary, undeformed_vertices);
-    double learning_rate = 20.5;
-    double tol = 1e-8;
-    int maxIter = 1000;
+    double tol = 1e-5;
+    int maxIter = 500;
     bool converged = false;
     for (int iter = 0; iter < maxIter; ++iter) {
         TV2 grad;
         Matrix<T, 6, 1> N = get_shape_function(bary(0), bary(1));
         TV X_current = undeformed_vertices.transpose()*N;
+        T E0 = ((X_current-X).segment<2>(0)).squaredNorm();
+        // std::cout << "obj: " << E0 << std::endl;
+        T alpha = 120.0;
+        int cnt = 0;
+        while (true)
+        {
+            bary -= alpha * 2*(((X_current-X).segment<2>(0)).transpose() * dXdbary);
+            bary = bary.cwiseMax(0.0).cwiseMin(1.0);
+            N = get_shape_function(bary(0), bary(1));
+            X_current = undeformed_vertices.transpose()*N;
+            T E1 = ((X_current-X).segment<2>(0)).squaredNorm();
+            if (E1 - E0 < 0 || cnt > 10) break;
+            alpha *= 0.5;
+            cnt += 1;
+        }
         grad = 2*(((X_current-X).segment<2>(0)).transpose() * dXdbary);
         // Gradient descent update
-        bary -= learning_rate * grad;
 
         // Ensure barycentric coordinates are valid
         bary = bary.cwiseMax(0.0).cwiseMin(1.0);
 
-        if (grad.norm() < tol) {
+        if (grad.norm() < tol || (X_current-X).norm() < tol) {
             converged = true;
             break;
         }

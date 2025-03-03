@@ -104,7 +104,7 @@ Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaAveraging(const TV sam
             stress_tensors[face_idx].block(0,0,2,2);
         sum += gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
 
-        if((sample_loc-sample[1]).norm() <= 1e-4) kernel_coloring_avg[face_idx] = gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
+        if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_avg[face_idx] = gaussian_kernel(sample_loc, triangleCenterofMass(vertices));
 
     }); 
     return stress/sum;
@@ -150,10 +150,10 @@ Vector<T, 3> QuadraticTriangle::computeWeightedStress(const TV sample_loc, TV di
         TV cut_point_coordinate;
         if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
             Vector<T,4> res = evaluatePerTriangleStress(getFaceVtxDeformed(face_idx), getFaceVtxUndeformed(face_idx), 
-            cut_point_coordinate, direction_normal, sample_loc);
+            cut_point_coordinate, direction_normal, sample_loc, face_idx);
             stress += res.segment<3>(0);
             sum += res(3);
-            if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_prob[face_idx] = res(3);
+            if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_prob[face_idx] += res(3);
             
         }
     });
@@ -176,7 +176,7 @@ T QuadraticTriangle::computeWeightedStrain(const TV sample_loc, TV direction){
         bool compute_with_segments = true;
         if(lineCutTriangle(x0, x1, x2, sample_loc, direction, cut_point_coordinate)){
             TV2 res = evaluatePerTriangleStrain(getFaceVtxDeformed(face_idx), getFaceVtxUndeformed(face_idx), 
-            cut_point_coordinate, direction, sample_loc);
+            cut_point_coordinate, direction, sample_loc, face_idx);
             strain += res(0);
             sum += res(1);
         }

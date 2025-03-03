@@ -60,7 +60,7 @@ public:
     bool use_Newton = true;
     bool add_gravity = false;
     bool use_consistent_mass_matrix = true;
-    T newton_tol = 1e-6;
+    T newton_tol = 1e-9;
     bool verbose = false;
 
     std::vector<T> residual_norms;
@@ -93,8 +93,13 @@ public:
 
     // ============================= Heterogenuous material ==============================
     bool heterogenuous = true;
+    bool tags = true;
+    VectorXi face_tags;
     VectorXT nu_visualization;
     VectorXT E_visualization;
+
+    // ============================= Stiffness tensor ====================================
+    bool set_boundary_condition = true;
     
 
 public:
@@ -358,12 +363,9 @@ public:
     // ============================= Stress Tensor Utilities ============================
     void computeStrainAndStressPerElement();
     Vector<T, 4> evaluatePerTriangleStress(const Matrix<T, 6, 3> vertices, const Matrix<T, 6, 3> undeformed_vertices, 
-        const TV cut_point_coordinate, const TV direction_normal, const TV sample_loc);
+        const TV cut_point_coordinate, const TV direction_normal, const TV sample_loc, int face_idx);
     Vector<T, 2> evaluatePerTriangleStrain(const Matrix<T, 6, 3> vertices, const Matrix<T, 6, 3> undeformed_vertices, 
-        const TV cut_point_coordinate, const TV direction, const TV sample_loc);
-
-    // ============================= Boundary Utilities =================================
-    void setEssentialBoundaryCondition(T displacement_x, T displacement_y);
+        const TV cut_point_coordinate, const TV direction, const TV sample_loc, int face_idx);
 
     // ============================= Kernel-weighted Cut Utilities ======================
     void setProbingLineDirections(unsigned int num_directions);
@@ -387,6 +389,7 @@ public:
     void testSharedEdgeStress(int A, int B, int v1, int v2);
     void testStressTensors(int A, int B);
 
+    // ============================== Native functionality ==============================
     std::vector<Matrix<T, 3, 3>> returnStressTensors(int A);
     std::vector<Matrix<T, 3, 3>> returnStrainTensors(int A);
 
@@ -398,11 +401,11 @@ public:
 
     // =============================== Quadratic Energy ==================================
     Matrix<T, 6, 1> get_shape_function(T beta_1, T beta_2);
-    Vector<T, 18> compute2DQuadraticShellEnergyGradient(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);
-    T compute2DQuadraticShellEnergy(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);	
-    Matrix<T, 18, 18> compute2DQuadraticShellEnergyHessian(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices);		
+    Vector<T, 18> compute2DQuadraticShellEnergyGradient(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices, int face_idx);
+    T compute2DQuadraticShellEnergy(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices, int face_idx);	
+    Matrix<T, 18, 18> compute2DQuadraticShellEnergyHessian(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices, int face_idx);		
     Matrix<T, 2, 2> compute2DDeformationGradient(const Matrix<T,6,3> & vertices, const Matrix<T,6,3> & undeformed_vertices, const Vector<T, 2> beta);
-    void setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X);
+    void setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X, int face_idx);
 
 public:
     QuadraticTriangle() 

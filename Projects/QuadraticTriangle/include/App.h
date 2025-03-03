@@ -54,6 +54,16 @@ public:
         std::vector<std::array<size_t, 2>> edges = setEdge(simulation.sample.size(), simulation.direction.size());
         psLine = polyscope::registerCurveNetwork("sample direction", line, edges);
 
+        if(simulation.tags)
+            psMesh->addFaceScalarQuantity("Face Tag", simulation.face_tags);
+        
+        psCloud->setPointRadius(0.004);
+        psCloud->updatePointPositions(simulation.pointInDeformedTriangle());
+
+        line = updateLinePosition(simulation);
+        psLine->updateNodePositions(line);
+        psLine->setRadius(0.0022);    
+
         polyscope::state::userCallback = [&](){ sceneCallback(); };
     }
 
