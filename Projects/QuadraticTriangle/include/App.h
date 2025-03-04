@@ -19,10 +19,8 @@ public:
 
     T t = 0;
 
-    bool animate_modes = false;
     bool run_sim = false;
     bool show_geometry = false;
-    int modes = 0;
     Eigen::MatrixXd eigen_vectors;
     Eigen::VectorXd eigen_values;
 
@@ -56,13 +54,6 @@ public:
 
         if(simulation.tags)
             psMesh->addFaceScalarQuantity("Face Tag", simulation.face_tags);
-        
-        psCloud->setPointRadius(0.004);
-        psCloud->updatePointPositions(simulation.pointInDeformedTriangle());
-
-        line = updateLinePosition(simulation);
-        psLine->updateNodePositions(line);
-        psLine->setRadius(0.0022);    
 
         polyscope::state::userCallback = [&](){ sceneCallback(); };
     }
@@ -79,7 +70,6 @@ public:
         }
         if (ImGui::Button("stop")) 
         {
-            animate_modes = false;
             run_sim = false;
         }
         if (ImGui::Button("advanceOneStep")) 
@@ -102,28 +92,14 @@ public:
             if (simulation.dynamics)
                 simulation.initializeDynamicStates();   
         }
-        if (ImGui::Checkbox("Gravity", &simulation.add_gravity)) 
-        {
-            
-        }
-        if (ImGui::Checkbox("Verbose", &simulation.verbose)) 
-        {
-            
-        }
-        if (animate_modes && !run_sim)
-        {
-            t += 0.1;
-            simulation.deformed = simulation.undeformed + simulation.u + eigen_vectors.col(modes) * std::sin(t);
-            
-            Eigen::MatrixXd meshV;
-            vectorToIGLMatrix<T, 3>(simulation.deformed, meshV);
-            psMesh->updateVertexPositions(meshV);
-        }
-        if (!animate_modes && run_sim)
+        ImGui::Checkbox("Gravity", &simulation.add_gravity)
+        ImGui::Checkbox("Verbose", &simulation.verbose)
+        if (run_sim)
         {
             bool finished = simulation.advanceOneStep(static_solve_step++);
 
-            if(finished){auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
+            if(finished){
+                auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
             auto strain_yy = std::vector<T> (simulation.strain_tensors.size());
             auto strain_xy = std::vector<T> (simulation.strain_tensors.size());
             for(int k = 0; k < simulation.strain_tensors.size(); ++k){
@@ -199,6 +175,43 @@ public:
             if (finished)
                 run_sim = false;
         }
+        ImGui::Checkbox("Heterogenuous graded", &simulation.heterogenuous);
+        ImGui::Checkbox("Heterogenuous discrete", &simulation.tags);
+        ImGui::SliderFloat("Poisson's ratio", &simulation.nu_default, 0.0f, 0.499f);
+        ImGui::SliderFloat("Base Young's modulus", &simulation.graded_k, 0.0f, 4.0f);
+        if(ImGui::SliderFloat("Kernel size", &simulation.std, 0.00001f, 0.1f)){
+            simulation.kernel_coloring_prob.setZero();
+            auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
+            auto strain_yy = std::vector<T> (simulation.strain_tensors.size());
+            auto strain_xy = std::vector<T> (simulation.strain_tensors.size());
+            for(int k = 0; k < simulation.strain_tensors.size(); ++k){
+                auto t = simulation.returnStrainTensors(k).at(1);
+                strain_xx[k] = t(0,0);
+                strain_xy[k] = t(1,0);
+                strain_yy[k] = t(1,1);
+            }
+
+            psMesh->addFaceScalarQuantity("kernelised strain xx magnitude", strain_xx);
+            psMesh->addFaceScalarQuantity("kernelised strain xy magnitude", strain_xy);
+            psMesh->addFaceScalarQuantity("kernelised strain yy magnitude", strain_yy);
+
+            auto kernel_stress_xx = std::vector<T> (simulation.stress_tensors.size());
+            auto kernel_stress_yy = std::vector<T> (simulation.stress_tensors.size());
+            auto kernel_stress_xy = std::vector<T> (simulation.stress_tensors.size());
+            for(int k = 0; k < simulation.stress_tensors.size(); ++k){
+                auto t = simulation.returnStressTensors(k).at(1);
+                kernel_stress_xx[k] = t(0,0);
+                kernel_stress_xy[k] = t(1,0);
+                kernel_stress_yy[k] = t(1,1);
+            }
+
+            psMesh->addFaceScalarQuantity("kernelised stress xx magnitude", kernel_stress_xx);
+            psMesh->addFaceScalarQuantity("kernelised stress xy magnitude", kernel_stress_xy);
+            psMesh->addFaceScalarQuantity("kernelised stress yy magnitude", kernel_stress_yy);
+            psMesh->addFaceScalarQuantity("gaussian kernel weight via probing", simulation.kernel_coloring_prob);
+            psMesh->addFaceScalarQuantity("gaussian kernel weight via averaging", simulation.kernel_coloring_avg);
+        }
+        
         if (show_geometry)
         {   
             // simulation.testHorizontalDirectionStretch();

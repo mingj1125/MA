@@ -19,8 +19,8 @@
 
 void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X, int face_idx){
     // nu = 0.45;
-    nu = 0.; 
-    E = 1e6;
+    nu = nu_default; 
+    E = E_default;
     if(tags && heterogenuous) {
         if(face_tags(face_idx) == 0) E /= 200;
         else if(face_tags(face_idx)%2==0){
@@ -28,7 +28,7 @@ void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& lo
         }
     } else if(heterogenuous){
         T x = X(1);
-        E = (1-x*1.5)*E;
+        E = (1+x*graded_k)*E;
     }
     local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);;
     local_mu = E / 2.0 / (1.0 + nu);
@@ -90,27 +90,10 @@ bool QuadraticTriangle::advanceOneStep(int step)
         {   
             computeStrainAndStressPerElement();
             // Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(1288);
-            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(436);
+            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(160);
             sample[1] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
             vertices = getFaceVtxUndeformed(0);
             sample[0] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
-            // TM E = TM::Zero();
-            // TV CoM = {-0.21, 0.185, 0};
-            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
-            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
-            // std::cout << E << std::endl;
-            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
-            // CoM = {-0.21, 0.30, 0};
-            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
-            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
-            // std::cout << E << std::endl;
-            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
-            // CoM = {-0.05, 0.26, 0};
-            // E.block(0,0,2,2) = findBestStrainTensorviaProbing(CoM, direction);
-            // std::cout << "sample loc: " << CoM.transpose() << std::endl;
-            // std::cout << E << std::endl;
-            // std::cout << "stress S: \n" << findBestStressTensorviaProbing(CoM, direction) << std::endl;
-            // sample[0] = CoM;
 
             // coarse mesh 
             // testStressTensors(0, 45);
@@ -460,11 +443,11 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
 
     if (set_boundary_condition){
         T shell_len = max_corner(1) - min_corner(1);
-        T displacement = -0.01*shell_len;
+        T displacement = -0.01;
 
         for (int j = 0; j < undeformed.size()/3; j++)
         {
-            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-5){
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-6){
                 for (int d = 0; d < 3; d++)
                 {   
                     if(d == 0) continue;
@@ -474,14 +457,15 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
         }
         for (int j = 0; j < undeformed.size()/3; j++)
         {
-            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-5){
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-6){
                 u[j * 3 + 1] = displacement;
-                u[j * 3] = 0;
+                // u[j * 3] = 0;
                 for (int d = 0; d < 3; d++)
                 {   
                     if(d == 0) continue;
                     dirichlet_data[j * 3 + d] = 0.;
                 }
+                // external_force[j * 3 + 1] = -3;
             }
         }
     }
@@ -892,7 +876,7 @@ std::vector<Matrix<T, 3, 3>> QuadraticTriangle::returnStrainTensors(int A){
     // beta_2 = std::max(0., beta_2);
     Matrix<T,6,1> N = get_shape_function(beta_1, beta_2);
     TV X = undeformed_vertices.transpose() * N;
-    if(heterogenuous) setMaterialParameter(E, nu, a, b, X, A);
+    setMaterialParameter(E, nu, a, b, X, A);
     
     TM strain_fit = TM::Zero();
     strain_fit.block(0,0,2,2) = findBestStrainTensorviaProbing(X, direction);

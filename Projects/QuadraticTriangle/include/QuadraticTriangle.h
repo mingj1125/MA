@@ -43,7 +43,10 @@ public:
     TV gravity = TV(0.0, -9.8, 0.0);    
     T E = 1e6;
     T nu = 0.45;
-    // T nu = 0.;
+    T E_default = 1e6;
+    float nu_default = 0.;
+    float graded_k = 0.5;
+    float std = 7e-4;
 
     T lambda, mu;
     int mesh_nodes;
@@ -93,7 +96,7 @@ public:
 
     // ============================= Heterogenuous material ==============================
     bool heterogenuous = true;
-    bool tags = true;
+    bool tags = false;
     VectorXi face_tags;
     VectorXT nu_visualization;
     VectorXT E_visualization;

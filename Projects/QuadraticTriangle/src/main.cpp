@@ -19,12 +19,11 @@ Matrix<T, 3, 3> findStiffnessTensor(std::string file_name){
     int c = 3;
     Eigen::MatrixXd n(3, c);
     Eigen::MatrixXd t(3, c);
-    int test_face = 436;
+    int test_face = 0;
     T beta_1 = 1./4;
     T beta_2 = 1./3;
     T shell_len = max_corner(1) - min_corner(1);
-    std::cout << shell_len << std::endl;
-    T displacement = -0.01*shell_len;
+    T displacement = -0.01;
 
     for(int i = 0; i < c-1; ++i){
         QuadraticTriangle tri;
@@ -134,7 +133,7 @@ int main()
     app.initializeScene();
     app.run();
 
-    std::cout << findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj") << std::endl;
+    // std::cout << findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj") << std::endl;
 
 
     return 0;

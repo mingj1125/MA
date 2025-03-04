@@ -24,7 +24,7 @@ void QuadraticTriangle::computeStrainAndStressPerElement(){
         // beta_2 = std::max(0., beta_2);
         Matrix<T,6,1> N = get_shape_function(beta_1, beta_2);
         TV X = undeformed_vertices.transpose() * N;
-        if(heterogenuous) setMaterialParameter(E, nu, a, b, X, face_idx);
+        setMaterialParameter(E, nu, a, b, X, face_idx);
         nu_visualization[face_idx] = nu;
         E_visualization[face_idx] = E;
 
@@ -42,7 +42,7 @@ void QuadraticTriangle::computeStrainAndStressPerElement(){
         strain_tensors[face_idx].block(0,0,2,2) = GreenS;
         defomation_gradients[face_idx].block(0,0,2,2) = F;
 
-        // std::cout << face_idx << " " << X(1) << " " << GreenS(1,1) << std::endl;
+        // std::cout << face_idx << " " << X(1) << " " << GreenS(1,0) << std::endl;
     });
 }
 
@@ -54,7 +54,7 @@ Vector<T, 4> QuadraticTriangle::evaluatePerTriangleStress(const Matrix<T, 6, 3> 
     if(cut_point_coordinate(1) >= 0.-1e-6 && cut_point_coordinate(1) <= 1.+1e-8) {boundary_points.push_back(x2 + cut_point_coordinate(1)*(x3-x2));}
     if(cut_point_coordinate(2) >= 0.-1e-6 && cut_point_coordinate(2) <= 1.+1e-8) {boundary_points.push_back(x3 + cut_point_coordinate(2)*(x1-x3));}
 
-    T std = 3e-7;
+    // T std = 7e-4;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
     auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
         TV2 dist = (CoM-sample_loc).segment(0,2);
@@ -64,7 +64,7 @@ Vector<T, 4> QuadraticTriangle::evaluatePerTriangleStress(const Matrix<T, 6, 3> 
 
     TV weighted_traction = TV::Zero();
     T weights = 0;
-    int n = 10; // Discretization points for cut segment
+    int n = 20; // Discretization points for cut segment
     for(int i = 0; i <= n; ++i){
         TV point = (boundary_points.at(1) - boundary_points.at(0))*i/n + boundary_points.at(0);
         if(gaussian_kernel(sample_loc, point) < 1e-2) continue;
@@ -72,7 +72,7 @@ Vector<T, 4> QuadraticTriangle::evaluatePerTriangleStress(const Matrix<T, 6, 3> 
         // TV2 beta({0.3, 0.3});
         TV X_p = undeformed_vertices.transpose() * get_shape_function(beta(0), beta(1));
         T a = lambda, b = mu;
-        if(heterogenuous) setMaterialParameter(E, nu, a, b, X_p, face_idx);
+        setMaterialParameter(E, nu, a, b, X_p, face_idx);
         Matrix<T, 2, 2> F_p = compute2DDeformationGradient(vertices, undeformed_vertices, beta);
         TM2 GreenS = 0.5 *(F_p.transpose()*F_p - TM2::Identity());
         TM2 S = (a * GreenS.trace() *TM2::Identity() + 2 * b * GreenS)*thickness;
@@ -92,7 +92,7 @@ Vector<T, 2> QuadraticTriangle::evaluatePerTriangleStrain(const Matrix<T, 6, 3> 
     if(cut_point_coordinate(1) >= 0.-1e-6 && cut_point_coordinate(1) <= 1.+1e-8) {boundary_points.push_back(x2 + cut_point_coordinate(1)*(x3-x2));}
     if(cut_point_coordinate(2) >= 0.-1e-6 && cut_point_coordinate(2) <= 1.+1e-8) {boundary_points.push_back(x3 + cut_point_coordinate(2)*(x1-x3));}
 
-    T std = 3e-7;
+    // T std = 7e-4;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
     auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
         TV2 dist = (CoM-sample_loc).segment(0,2);
@@ -102,7 +102,7 @@ Vector<T, 2> QuadraticTriangle::evaluatePerTriangleStrain(const Matrix<T, 6, 3> 
 
     T weighted_strain = 0;
     T weights = 0;
-    int n = 10; // Discretization points for cut segment
+    int n = 20; // Discretization points for cut segment
     for(int i = 0; i <= n; ++i){
         TV point = (boundary_points.at(1) - boundary_points.at(0))*i/n + boundary_points.at(0);
         if(gaussian_kernel(sample_loc, point) < 1e-2) continue;
@@ -110,7 +110,7 @@ Vector<T, 2> QuadraticTriangle::evaluatePerTriangleStrain(const Matrix<T, 6, 3> 
         // TV2 beta({0.3, 0.3});
         TV X_p = undeformed_vertices.transpose() * get_shape_function(beta(0), beta(1));
         T a = lambda, b = mu;
-        if(heterogenuous) setMaterialParameter(E, nu, a, b, X_p, face_idx);
+        setMaterialParameter(E, nu, a, b, X_p, face_idx);
         Matrix<T, 2, 2> F_p = compute2DDeformationGradient(vertices, undeformed_vertices, beta);
         TM2 GreenS = 0.5 *(F_p.transpose()*F_p - TM2::Identity());
         T strain = ((direction.segment<2>(0)).transpose()) * (GreenS * direction.segment<2>(0));

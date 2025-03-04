@@ -82,13 +82,11 @@ Matrix<T, 2, 2> QuadraticTriangle::findBestStrainTensorviaProbing(const TV sampl
 }
 
 Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaAveraging(const TV sample_loc){
-    T pi = M_PI;
-    T std = 7e-3;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
-    auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
+    auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
         TV2 dist = (CoM-sample_loc).segment(0,2);
         T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
-        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * M_PI), 2)*variance_matrix.determinant());
     };
 
     T sum = 0.;
@@ -111,13 +109,11 @@ Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaAveraging(const TV sam
 }
 
 Matrix<T, 3, 3> QuadraticTriangle::findBestStrainTensorviaAveraging(const TV sample_loc){
-    T pi = M_PI;
-    T std = 7e-3;
     TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
-    auto gaussian_kernel = [pi, variance_matrix](TV sample_loc, TV CoM){
+    auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
         TV2 dist = (CoM-sample_loc).segment(0,2);
         T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
-        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * pi), 2)*variance_matrix.determinant());
+        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * M_PI), 2)*variance_matrix.determinant());
     };
 
     T sum = 0.;
@@ -153,7 +149,7 @@ Vector<T, 3> QuadraticTriangle::computeWeightedStress(const TV sample_loc, TV di
             cut_point_coordinate, direction_normal, sample_loc, face_idx);
             stress += res.segment<3>(0);
             sum += res(3);
-            if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_prob[face_idx] += res(3);
+            if(pointInTriangle(sample[1]) == pointInTriangle(sample_loc)) kernel_coloring_prob[face_idx] = std::max(kernel_coloring_prob[face_idx], res(3));
             
         }
     });
