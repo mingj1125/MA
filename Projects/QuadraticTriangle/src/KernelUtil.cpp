@@ -3,7 +3,7 @@
 // assume planar case for now
 void QuadraticTriangle::setProbingLineDirections(unsigned int num_directions){
     direction = std::vector<TV>(num_directions);
-    T angle = std::acos(-1) / num_directions;
+    T angle = M_PI / num_directions;
     for(int i = 0; i < num_directions; ++i){
         direction[i] << std::cos(angle*i), std::sin(angle*i), 0;
     }

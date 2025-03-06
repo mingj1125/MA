@@ -5,6 +5,7 @@
 #include "polyscope/surface_mesh.h"
 #include "polyscope/point_cloud.h"
 #include "polyscope/curve_network.h"
+#include "../include/StiffnessTensor.h"
 
 template<class Simulation>
 class App
@@ -64,10 +65,10 @@ public:
         {
             run_sim = true;
         }
-        if (ImGui::Button("Show Geometry")) 
-        {
-            show_geometry = true;
-        }
+        // if (ImGui::Button("Show Geometry")) 
+        // {
+        //     show_geometry = true;
+        // }
         if (ImGui::Button("stop")) 
         {
             run_sim = false;
@@ -82,18 +83,36 @@ public:
             // vectorToIGLMatrix<int, 3>(simulation.faces, meshF);
             // polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
         }
+
+        if(ImGui::Button("Stiffness")){
+            std::vector<Matrix<T, 3, 3>> sts = findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj", simulation);
+            std::vector<T> E(sts.size());
+            std::vector<T> nus(sts.size());
+            for(int st = 0; st < sts.size(); ++st){
+                T C_12 = sts[st](1,0); T C_11 = 0.5*(sts[st](0,0)+sts[st](1,1));
+                T nu = C_12/C_11/(1+C_12/C_11);
+                nus[st] = nu;
+                E[st] = ((C_11-C_12)/2+sts[st](2,2)) * (1+nu);
+                // E[st] = sts[st](0,0);
+                if(st == 1036) std::cout << "1036: "<< sts[st] << std::endl;
+                if(st == 701) std::cout << "701: "<< sts[st] << std::endl;
+            }
+            psMesh->addFaceScalarQuantity("Kernelised stiffness(E)", E);
+            psMesh->addFaceScalarQuantity("Kernelised nu", nus);
+        }
+
         if (ImGui::Checkbox("ConsistentMass", &simulation.use_consistent_mass_matrix)) 
         {
             if (!simulation.use_consistent_mass_matrix)
                 simulation.computeMassMatrix();
         }
-        if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
-        {
-            if (simulation.dynamics)
-                simulation.initializeDynamicStates();   
-        }
-        ImGui::Checkbox("Gravity", &simulation.add_gravity)
-        ImGui::Checkbox("Verbose", &simulation.verbose)
+        // if (ImGui::Checkbox("Dynamics", &simulation.dynamics)) 
+        // {
+        //     if (simulation.dynamics)
+        //         simulation.initializeDynamicStates();   
+        // }
+        // ImGui::Checkbox("Gravity", &simulation.add_gravity);
+        // ImGui::Checkbox("Verbose", &simulation.verbose);
         if (run_sim)
         {
             bool finished = simulation.advanceOneStep(static_solve_step++);
@@ -175,11 +194,13 @@ public:
             if (finished)
                 run_sim = false;
         }
-        ImGui::Checkbox("Heterogenuous graded", &simulation.heterogenuous);
+        ImGui::Checkbox("Heterogenuous graded", &simulation.graded);
         ImGui::Checkbox("Heterogenuous discrete", &simulation.tags);
         ImGui::SliderFloat("Poisson's ratio", &simulation.nu_default, 0.0f, 0.499f);
         ImGui::SliderFloat("Base Young's modulus", &simulation.graded_k, 0.0f, 4.0f);
-        if(ImGui::SliderFloat("Kernel size", &simulation.std, 0.00001f, 0.1f)){
+        // if(ImGui::SliderFloat("Kernel size", &simulation.std, 0.00001f, 0.1f)){
+        ImGui::InputDouble("Kernel size", &simulation.std, 0.00001, 0.01, "%.5f");
+        if(ImGui::Button("Update kernelization")){
             simulation.kernel_coloring_prob.setZero();
             auto strain_xx = std::vector<T> (simulation.strain_tensors.size());
             auto strain_yy = std::vector<T> (simulation.strain_tensors.size());

@@ -21,12 +21,12 @@ void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& lo
     // nu = 0.45;
     nu = nu_default; 
     E = E_default;
-    if(tags && heterogenuous) {
+    if(tags) {
         if(face_tags(face_idx) == 0) E /= 200;
         else if(face_tags(face_idx)%2==0){
             E /= 10;
         }
-    } else if(heterogenuous){
+    } else if(graded){
         T x = X(1);
         E = (1+x*graded_k)*E;
     }
@@ -90,7 +90,7 @@ bool QuadraticTriangle::advanceOneStep(int step)
         {   
             computeStrainAndStressPerElement();
             // Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(1288);
-            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(160);
+            Matrix<T, 6, 3> vertices = getFaceVtxUndeformed(1036);
             sample[1] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
             vertices = getFaceVtxUndeformed(0);
             sample[0] = vertices.transpose()*get_shape_function(1/4., 1/3.); 
@@ -408,7 +408,7 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
     kernel_coloring_prob = VectorXT::Zero(F.rows());
     kernel_coloring_avg = VectorXT::Zero(F.rows());
     sample = std::vector<TV>(2);
-    setProbingLineDirections(8);
+    setProbingLineDirections(6);
 
     external_force = VectorXT::Zero(deformed.rows());
 
@@ -993,8 +993,8 @@ Matrix<T, 2, 2> dXdbeta(Vector<T, 2> beta, const Matrix<T,6,3> undeformed_vertic
 Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,6,3> undeformed_vertices){
     TV2 bary(0.3, 0.3);
     Matrix<T, 2, 2> dXdbary = dXdbeta(bary, undeformed_vertices);
-    double tol = 1e-5;
-    int maxIter = 500;
+    double tol = 1e-9;
+    int maxIter = 2500;
     bool converged = false;
     for (int iter = 0; iter < maxIter; ++iter) {
         TV2 grad;
@@ -1002,7 +1002,7 @@ Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,
         TV X_current = undeformed_vertices.transpose()*N;
         T E0 = ((X_current-X).segment<2>(0)).squaredNorm();
         // std::cout << "obj: " << E0 << std::endl;
-        T alpha = 120.0;
+        T alpha = 1000.0;
         int cnt = 0;
         while (true)
         {
@@ -1021,14 +1021,16 @@ Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,
         // Ensure barycentric coordinates are valid
         bary = bary.cwiseMax(0.0).cwiseMin(1.0);
 
-        if (grad.norm() < tol || (X_current-X).norm() < tol) {
+        if (grad.norm() < tol || (X_current-X).segment<2>(0).norm() < tol) {
             converged = true;
             break;
         }
     }
     if (!converged){
         // bary(0) = -1;
-        std::cout << "Not found with bary: \n" << bary.transpose() << std::endl;
+        Matrix<T, 6, 1> N = get_shape_function(bary(0), bary(1));
+        TV X_current = undeformed_vertices.transpose()*N;
+        std::cout << "Not found with error: \n" << (X_current-X).segment<2>(0).norm() << std::endl;
     }
     return bary;
 }

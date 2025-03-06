@@ -46,7 +46,7 @@ public:
     T E_default = 1e6;
     float nu_default = 0.;
     float graded_k = 0.5;
-    float std = 7e-4;
+    double std = 0.001;
 
     T lambda, mu;
     int mesh_nodes;
@@ -95,8 +95,8 @@ public:
     std::vector<TV> direction;
 
     // ============================= Heterogenuous material ==============================
-    bool heterogenuous = true;
-    bool tags = false;
+    bool graded = false;
+    bool tags = true;
     VectorXi face_tags;
     VectorXT nu_visualization;
     VectorXT E_visualization;
@@ -415,6 +415,8 @@ public:
     {
         updateLameParameters();
     }
+    QuadraticTriangle(float nu_default_s, float graded_k_s, float std_s): nu_default(nu_default_s), graded_k(graded_k_s), std(std_s)
+    {}
     ~QuadraticTriangle() {}
 };
 

@@ -1,10 +1,9 @@
-#include "polyscope/polyscope.h"
-#include "polyscope/surface_mesh.h"
 #include <igl/readOBJ.h>
 #include "../include/QuadraticTriangle.h"
 #include "../include/App.h"
+#include "../include/StiffnessTensor.h"
 
-Matrix<T, 3, 3> findStiffnessTensor(std::string file_name){
+/* Matrix<T, 3, 3> findStiffnessTensor(std::string file_name){
     Eigen::MatrixXd V; Eigen::MatrixXi F;
     igl::readOBJ(file_name, V, F);
     Vector<T,3> min_corner = V.colwise().minCoeff();
@@ -108,7 +107,7 @@ Matrix<T, 3, 3> findStiffnessTensor(std::string file_name){
                             x(3), x(4), x(5);
 
     return fitted_symmetric_tensor;
-}
+}*/
 
 int main()
 {
@@ -133,7 +132,7 @@ int main()
     app.initializeScene();
     app.run();
 
-    // std::cout << findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj") << std::endl;
+    // std::cout << findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj")[0] << std::endl;
 
 
     return 0;
