@@ -18,7 +18,7 @@
 #include <algorithm>
 
 void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& local_mu, TV X, int face_idx){
-    // nu = 0.45;
+
     nu = nu_default; 
     E = E_default;
     if(tags) {
@@ -30,7 +30,7 @@ void QuadraticTriangle::setMaterialParameter(T& E, T& nu, T& local_lambda, T& lo
         T x = X(1);
         E = (1+x*graded_k)*E;
     }
-    local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);;
+    local_lambda = E * nu / (1.0 + nu) / (1.0 - 2.0 * nu);
     local_mu = E / 2.0 / (1.0 + nu);
 }
 
@@ -318,8 +318,8 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
     MatrixXT V; MatrixXi F;
     igl::readOBJ(filename, V, F);
     face_tags = VectorXi(F.rows()); face_tags.setZero();
+    mesh_file = filename;
     if(tags) {
-        std::string tag_file = "../../../Projects/QuadraticTriangle/data/sun_mesh_line_face_tags.csv";
         std::ifstream file(tag_file); // Open the file
         if (!file.is_open()) {
             std::cerr << "Error: Could not open tag file!" << std::endl;
@@ -348,8 +348,6 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
     T bb_diag = max_corner(1) - min_corner(1);
 
     V *= 1.0 / bb_diag;
-
-    V *= 0.5;
 
     faces.resize(F.rows(), 6);
     mesh_nodes = V.rows();
@@ -408,7 +406,7 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
     kernel_coloring_prob = VectorXT::Zero(F.rows());
     kernel_coloring_avg = VectorXT::Zero(F.rows());
     sample = std::vector<TV>(2);
-    setProbingLineDirections(6);
+    setProbingLineDirections(12);
 
     external_force = VectorXT::Zero(deformed.rows());
 
@@ -447,17 +445,18 @@ void QuadraticTriangle::initializeFromFile(const std::string& filename)
 
         for (int j = 0; j < undeformed.size()/3; j++)
         {
-            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-6){
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) >= V.colwise().maxCoeff()(1)-1e-7){
                 for (int d = 0; d < 3; d++)
                 {   
                     if(d == 0) continue;
                     dirichlet_data[j * 3 + d] = 0.;
                 }
+                // external_force[j * 3 + 1] = 3;
             }
         }
         for (int j = 0; j < undeformed.size()/3; j++)
         {
-            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-6){
+            if(undeformed(j*3+2) <= 0 && undeformed(j*3+1) <= V.colwise().minCoeff()(1)+1e-7){
                 u[j * 3 + 1] = displacement;
                 // u[j * 3] = 0;
                 for (int d = 0; d < 3; d++)
@@ -993,7 +992,7 @@ Matrix<T, 2, 2> dXdbeta(Vector<T, 2> beta, const Matrix<T,6,3> undeformed_vertic
 Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,6,3> undeformed_vertices){
     TV2 bary(0.3, 0.3);
     Matrix<T, 2, 2> dXdbary = dXdbeta(bary, undeformed_vertices);
-    double tol = 1e-9;
+    double tol = 2e-8;
     int maxIter = 2500;
     bool converged = false;
     for (int iter = 0; iter < maxIter; ++iter) {
@@ -1002,7 +1001,7 @@ Vector<T, 2> QuadraticTriangle::findBarycentricCoord(const TV X, const Matrix<T,
         TV X_current = undeformed_vertices.transpose()*N;
         T E0 = ((X_current-X).segment<2>(0)).squaredNorm();
         // std::cout << "obj: " << E0 << std::endl;
-        T alpha = 1000.0;
+        T alpha = 100.0;
         int cnt = 0;
         while (true)
         {

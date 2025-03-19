@@ -85,7 +85,7 @@ public:
         }
 
         if(ImGui::Button("Stiffness")){
-            std::vector<Matrix<T, 3, 3>> sts = findStiffnessTensor("../../../Projects/QuadraticTriangle/data/sun_mesh_line.obj", simulation);
+            std::vector<Matrix<T, 3, 3>> sts = findStiffnessTensor(simulation.mesh_file, simulation);
             std::vector<T> E(sts.size());
             std::vector<T> nus(sts.size());
             for(int st = 0; st < sts.size(); ++st){
@@ -93,7 +93,7 @@ public:
                 T nu = C_12/C_11/(1+C_12/C_11);
                 nus[st] = nu;
                 E[st] = ((C_11-C_12)/2+sts[st](2,2)) * (1+nu);
-                // E[st] = sts[st](0,0);
+                // E[st] = sts[st](1,1);
                 if(st == 1036) std::cout << "1036: "<< sts[st] << std::endl;
                 if(st == 701) std::cout << "701: "<< sts[st] << std::endl;
             }
@@ -191,14 +191,19 @@ public:
             vectorToIGLMatrix<T, 3>(simulation.external_force, ext_force);
             psMesh->addVertexVectorQuantity("external forces", ext_force);}
 
-            if (finished)
+            if (finished){
                 run_sim = false;
+                static_solve_step = 0;
+            }
         }
-        ImGui::Checkbox("Heterogenuous graded", &simulation.graded);
-        ImGui::Checkbox("Heterogenuous discrete", &simulation.tags);
+        if(ImGui::Checkbox("Heterogenuous graded", &simulation.graded)){
+            simulation.tags = false;
+        }
+        if(ImGui::Checkbox("Heterogenuous discrete", &simulation.tags)){
+            simulation.graded = false;
+        }
         ImGui::SliderFloat("Poisson's ratio", &simulation.nu_default, 0.0f, 0.499f);
         ImGui::SliderFloat("Base Young's modulus", &simulation.graded_k, 0.0f, 4.0f);
-        // if(ImGui::SliderFloat("Kernel size", &simulation.std, 0.00001f, 0.1f)){
         ImGui::InputDouble("Kernel size", &simulation.std, 0.00001, 0.01, "%.5f");
         if(ImGui::Button("Update kernelization")){
             simulation.kernel_coloring_prob.setZero();
@@ -231,6 +236,8 @@ public:
             psMesh->addFaceScalarQuantity("kernelised stress yy magnitude", kernel_stress_yy);
             psMesh->addFaceScalarQuantity("gaussian kernel weight via probing", simulation.kernel_coloring_prob);
             psMesh->addFaceScalarQuantity("gaussian kernel weight via averaging", simulation.kernel_coloring_avg);
+            psMesh->addFaceScalarQuantity("Poisson Ratio", simulation.nu_visualization);
+            psMesh->addFaceScalarQuantity("Young's Modulo", simulation.E_visualization);
         }
         
         if (show_geometry)

@@ -58,15 +58,15 @@ Vector<T, 4> QuadraticTriangle::evaluatePerTriangleStress(const Matrix<T, 6, 3> 
     auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
         TV2 dist = (CoM-sample_loc).segment(0,2);
         T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
-        return std::exp(-0.5*upper) / std::sqrt(std::pow((2 * M_PI), 2)*variance_matrix.determinant());
+        return std::exp(-0.5*upper) / (2 * M_PI *std::sqrt(variance_matrix.determinant()));
     };
 
     TV weighted_traction = TV::Zero();
     T weights = 0;
-    int n = 15; // Discretization points for cut segment
+    int n = std::max((int)((boundary_points.at(1) - boundary_points.at(0)).norm()/(std/6)), 5); // Discretization points for cut segment
     for(int i = 0; i <= n; ++i){
         TV point = (boundary_points.at(1) - boundary_points.at(0))*i/n + boundary_points.at(0);
-        if(gaussian_kernel(sample_loc, point) < 1e-3) continue;
+        if((sample_loc- point).norm() > 4*std) continue;
         TV2 beta = findBarycentricCoord(point, undeformed_vertices);
         // TV2 beta({0.3, 0.3});
         TV X_p = undeformed_vertices.transpose() * get_shape_function(beta(0), beta(1));
@@ -79,7 +79,7 @@ Vector<T, 4> QuadraticTriangle::evaluatePerTriangleStress(const Matrix<T, 6, 3> 
         weights += gaussian_kernel(sample_loc, point);
     }
     Vector<T, 4> res; res.segment<3>(0) = weighted_traction; res(3) = weights;
-    // res *= (boundary_points.at(1) - boundary_points.at(0)).norm() /n;
+    res *= (boundary_points.at(1) - boundary_points.at(0)).norm() /(2*n);
     return res;
 }
 
@@ -100,10 +100,10 @@ Vector<T, 2> QuadraticTriangle::evaluatePerTriangleStrain(const Matrix<T, 6, 3> 
 
     T weighted_strain = 0;
     T weights = 0;
-    int n = 15; // Discretization points for cut segment
+    int n = std::max((int)((boundary_points.at(1) - boundary_points.at(0)).norm()/(std/6)), 5); // Discretization points for cut segment
     for(int i = 0; i <= n; ++i){
         TV point = (boundary_points.at(1) - boundary_points.at(0))*i/n + boundary_points.at(0);
-        if(gaussian_kernel(sample_loc, point) < 1e-3) continue;
+        if((sample_loc- point).norm() > 4*std) continue;
         TV2 beta = findBarycentricCoord(point, undeformed_vertices);
         // TV2 beta({0.3, 0.3});
         TV X_p = undeformed_vertices.transpose() * get_shape_function(beta(0), beta(1));
@@ -116,6 +116,6 @@ Vector<T, 2> QuadraticTriangle::evaluatePerTriangleStrain(const Matrix<T, 6, 3> 
         weights += gaussian_kernel(sample_loc, point);
     }
     Vector<T, 2> res; res(0) = weighted_strain; res(1) = weights;
-    // res *= (boundary_points.at(1) - boundary_points.at(0)).norm() /n;
+    res *= (boundary_points.at(1) - boundary_points.at(0)).norm() /(2*n);
     return res;
 }

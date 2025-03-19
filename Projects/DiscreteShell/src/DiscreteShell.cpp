@@ -378,11 +378,11 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     TV min_corner = V.colwise().minCoeff();
     TV max_corner = V.colwise().maxCoeff();
 
-    T bb_diag = (max_corner - min_corner).norm();
+    T bb_diag = (max_corner(1) - min_corner(1));
 
     V *= 1.0 / bb_diag;
 
-    V *= 0.5;
+    // V *= 0.5;
 
     auto rotationMatrixFromEulerAngle = [](T angle_z, T angle_y, T angle_x)
     {
@@ -471,7 +471,7 @@ void DiscreteShell::initializeFromFile(const std::string& filename)
     window_height = 5;
 
     T shell_len = max_corner(1) - min_corner(1);
-    T displacement = -0.01*shell_len;
+    T displacement = -0.01;
 
     if (!set_window) { // if no window testing required we stretch sheet
    

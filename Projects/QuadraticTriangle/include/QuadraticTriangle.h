@@ -96,7 +96,9 @@ public:
 
     // ============================= Heterogenuous material ==============================
     bool graded = false;
-    bool tags = true;
+    bool tags = false;
+    std::string tag_file;
+    std::string mesh_file;
     VectorXi face_tags;
     VectorXT nu_visualization;
     VectorXT E_visualization;
@@ -415,7 +417,9 @@ public:
     {
         updateLameParameters();
     }
-    QuadraticTriangle(float nu_default_s, float graded_k_s, float std_s): nu_default(nu_default_s), graded_k(graded_k_s), std(std_s)
+    QuadraticTriangle(float nu_default_s, float graded_k_s, float std_s,
+        bool tags_s, bool graded_s): nu_default(nu_default_s), graded_k(graded_k_s), 
+        std(std_s), tags(tags_s), graded(graded_s)
     {}
     ~QuadraticTriangle() {}
 };

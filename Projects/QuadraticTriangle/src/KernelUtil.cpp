@@ -12,17 +12,13 @@ void QuadraticTriangle::setProbingLineDirections(unsigned int num_directions){
 Matrix<T, 3, 3> QuadraticTriangle::findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions){
     int tri = pointInTriangle(sample_loc);
     if(tri == -1) std::cout << "Sample point not in mesh!" << std::endl;
-    // std::cout << "Found sample point in triangle: " << tri << std::endl;
-    // TM2 F_2D_inv = optimization_homo_target_tensors[tri].lu().solve(TM2::Identity());
     int c = line_directions.size();
     MatrixXT n(3, c);
     MatrixXT t(3, c);
     for(int i = 0; i < c; ++i){
         TV direction = line_directions.at(i);
         TV2 direction_normal_2D; direction_normal_2D << direction(1), -direction(0);
-        // direction_normal_2D = F_2D_inv.transpose()*direction_normal_2D;
         TV direction_normal; direction_normal.segment(0,2) = direction_normal_2D;
-        // direction_normal = direction_normal.normalized(); 
         t.col(i) = computeWeightedStress(sample_loc, direction);
         n.col(i) = direction_normal;
     }
@@ -62,7 +58,6 @@ Matrix<T, 2, 2> QuadraticTriangle::findBestStrainTensorviaProbing(const TV sampl
     for(int i = 0; i < c; ++i){
         TV direction = line_directions.at(i);
         t(i) = computeWeightedStrain(sample_loc, direction);
-        // if(t(i) >= 1e3 || t(i) <= -1e3) {std::cout << "sample " << sample_loc.transpose() <<  " with direction " << direction.transpose() << " : with strain: " << t(i) << std::endl;} 
         n.col(i) = direction;
     }
 

@@ -19,10 +19,8 @@ int main()
     // int static_solve_step = 0;
     // bool finished = discrete_shell.advanceOneStep(static_solve_step++);
     // while(!finished) finished = discrete_shell.advanceOneStep(static_solve_step++);
-
     
     App<DiscreteShell> app(discrete_shell);
-    // discrete_shell.setEssentialBoundaryCondition(displacement[0], displacement[1]);
 
     app.initializeScene();
     app.run();

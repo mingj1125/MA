@@ -15,8 +15,6 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
 
     V *= 1.0 / bb_diag;
 
-    V *= 0.5;
-
     int c = 3;
     std::vector<Eigen::MatrixXd> n(F.rows(), Eigen::MatrixXd(3, c));
     std::vector<Eigen::MatrixXd> t(F.rows(), Eigen::MatrixXd(3, c));
@@ -24,11 +22,13 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
     T beta_1 = 1./3;
     T beta_2 = 1./3;
     T shell_len = max_corner(1) - min_corner(1);
-    T displacement = -0.005;
+    T displacement = -0.01;
 
     for(int i = 0; i < 2; ++i){
-        QuadraticTriangle tri(sim.nu_default, sim.graded_k, sim.std);
+        QuadraticTriangle tri(sim.nu_default, sim.graded_k, sim.std, sim.tags, sim.graded);
         tri.set_boundary_condition = false;
+        tri.tag_file = sim.tag_file;
+        tri.tags = true;
         tri.initializeFromFile(file_name);
     
         for (int j = 0; j < tri.undeformed.size()/3; j++)
@@ -64,8 +64,10 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
         std::cout << "701: With strain: " << n[1036].col(i).transpose() << "\n has stress: " << t[1036].col(i).transpose() << std::endl; 
     }
 
-    QuadraticTriangle tri(sim.nu_default, sim.graded_k, sim.std);
+    QuadraticTriangle tri(sim.nu_default, sim.graded_k, sim.std, sim.tags, sim.graded);
     tri.set_boundary_condition = false;
+    tri.tag_file = sim.tag_file;
+    tri.tags = true;
     tri.initializeFromFile(file_name);
     
     for (int j = 0; j < tri.undeformed.size()/3; j++)
