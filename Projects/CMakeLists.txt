@@ -1,3 +1,4 @@
 add_subdirectory(DiscreteShell)
 add_subdirectory(EoLRods)
 add_subdirectory(QuadraticTriangle)
+add_subdirectory(PBCevaluation)
