@@ -43,12 +43,14 @@ public:
         psMesh->setSmoothShade(false);
         psMesh->setSurfaceColor(glm::vec3(0.255, 0.514, 0.996));
         psMesh->setEdgeWidth(1.0);
-        // std::vector<Eigen::Vector3d> points(simulation.sample);
-        // psCloud = polyscope::registerPointCloud("sample points", points);
+        std::vector<Eigen::Vector3d> points(simulation.sample);
+        psCloud = polyscope::registerPointCloud("sample points", points);
 
-        // std::vector<Eigen::Vector3d> line (simulation.sample.size()*(simulation.direction.size()+1), Eigen::Vector3d::Zero());
-        // std::vector<std::array<size_t, 2>> edges = setEdge(simulation.sample.size(), simulation.direction.size());
-        // psLine = polyscope::registerCurveNetwork("sample direction", line, edges);
+        std::vector<Eigen::Vector3d> line (simulation.sample.size()*(simulation.direction.size()+1), Eigen::Vector3d::Zero());
+        std::vector<std::array<size_t, 2>> edges = setEdge(simulation.sample.size(), simulation.direction.size());
+        line = updateLinePosition(simulation);
+        psLine = polyscope::registerCurveNetwork("sample direction", line, edges);
+        psLine->setRadius(0.001);
 
         psMesh->addFaceScalarQuantity("Face Tag", simulation.face_tags);
         psMesh->addFaceScalarQuantity("Local E", simulation.E_visualization);
@@ -152,6 +154,10 @@ public:
             psMesh->addFaceScalarQuantity("kernelised stress xy magnitude", kernel_stress_xy);
             psMesh->addFaceScalarQuantity("kernelised stress yy magnitude", kernel_stress_yy);
             
+        }
+        if(ImGui::Button("Update kernel visualization")){
+            std::cout << "Kernel size: " << simulation.std << std::endl;
+            simulation.visualizeKernelWeighting();
             psMesh->addFaceScalarQuantity("gaussian kernel weight via probing", simulation.kernel_coloring_prob);
         }
     }
@@ -173,18 +179,12 @@ public:
 
     std::vector<Eigen::Vector3d> updateLinePosition(Simulation& sim){
         std::vector<Eigen::Vector3d> line;
-        auto sample_pos = sim.pointInDeformedTriangle();
         for(size_t i = 0; i < sim.sample.size(); ++i){
-            line.push_back(sample_pos[i]);
-            int tri = sim.pointInTriangle(sim.sample[i]);
-            // auto F_2D_inv = sim.defomation_gradients[tri].lu().solve(Matrix<T, 2, 2>::Identity());
-            Matrix<T, 3, 3> F_inv = Matrix<T, 3, 3>::Zero();
-            auto F = F_inv;
-            F.block(0,0,2,2) = sim.defomation_gradients[tri];
-            // F_inv.block(0,0,2,2) = F_2D_inv;
+            Eigen::Vector3d sample_i = sim.sample[i];
+            auto sample_pos = sim.pointPosInVisualTriangle(sample_i.segment<2>(0));
+            line.push_back(sample_pos);
             for(size_t j = 0; j < sim.direction.size(); ++j){
-                // line.push_back(sample_pos[i] + (F_inv.transpose()*sim.direction[j]).normalized()*0.05);
-                line.push_back(sample_pos[i] + (F*sim.direction[j]).normalized()*0.05);
+                line.push_back(sample_pos + (sim.direction[j]).normalized()*100);
             }
         }
         return line;

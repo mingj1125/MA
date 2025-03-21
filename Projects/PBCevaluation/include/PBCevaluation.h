@@ -62,6 +62,7 @@ public:
 
 	void initializeVisualizationMesh(std::string filename);
 	void visualizeMaterialProperties();
+	void visualizeKernelWeighting();
 	void initializeMeshInformation(std::string undeformed_mesh, std::string deformed_mesh);
 	void setProbingLineDirections(unsigned int num_directions);
 	Matrix<T, 3, 3> findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions);
@@ -72,6 +73,7 @@ public:
 	std::vector<Matrix<T, 2, 2>> findCorrespondenceInUnit(TV2 position);
 	int pointInTriangle(const TV2 sample_loc);
 	int pointInVisualTriangle(const TV2 sample_loc);
+	Vector<T,3> pointPosInVisualTriangle(const TV2 sample_loc);
 	std::vector<Matrix<T, 2, 2>> returnStressTensors(int A);
     std::vector<Matrix<T, 2, 2>> returnStrainTensors(int A);
 
@@ -96,7 +98,7 @@ public:
         }
         return cellx;
     }
-	
+
 	std::vector<Matrix<T, 2, 2>> read_matrices(const std::string& filename) {
 		std::vector<Matrix<T, 2, 2>> matrices;
 		std::ifstream in_file(filename);

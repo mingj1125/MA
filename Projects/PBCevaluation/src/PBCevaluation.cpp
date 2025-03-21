@@ -54,6 +54,28 @@ void PBCevaluation::visualizeMaterialProperties(){
     }
 }
 
+void PBCevaluation::visualizeKernelWeighting(){
+    
+    kernel_coloring_prob.setZero();
+    TM2 variance_matrix; variance_matrix << std*std, 0, 0, std*std;
+    auto gaussian_kernel = [variance_matrix](TV sample_loc, TV CoM){
+        TV2 dist = (CoM-sample_loc).segment(0,2);
+        T upper = dist.transpose()*variance_matrix.ldlt().solve(dist);
+        return std::exp(-0.5*upper) / (2 * M_PI *std::sqrt(variance_matrix.determinant()));
+    };
+
+    for(int j = 0; j < direction.size(); ++j){
+        T step = 5;
+        int n = 4*std/step; // Discretization points for cut segment
+        for(int i = -n; i <= n; ++i){
+            TV point = sample[1] + i*direction[j]*step;
+            kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))] = 
+                std::max(kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))], 
+                        gaussian_kernel(sample[1], point));
+        }
+    }
+}
+
 void PBCevaluation::initializeMeshInformation(std::string undeformed_mesh, std::string mesh_info){
     igl::readOBJ(undeformed_mesh, unit_undeformed, unit_faces);
     TV min_corner = unit_undeformed.colwise().minCoeff();
@@ -175,10 +197,6 @@ Vector<T, 3> PBCevaluation::computeWeightedStress(const TV sample_loc, TV direct
             weighted_traction.segment<2>(0) += S * direction_normal.segment<2>(0) * gaussian_kernel(sample_loc, point);
             weights += gaussian_kernel(sample_loc, point);
         }
-        // if(pointInTriangle(sample[1].segment<2>(0)) == pointInTriangle(sample_loc.segment<2>(0))) 
-        //     kernel_coloring_prob[pointInTriangle(point.segment<2>(0))] = 
-        //         std::max(kernel_coloring_prob[pointInTriangle(point.segment<2>(0))], 
-        //                  gaussian_kernel(sample_loc, point));
     }
     Vector<T, 4> res; res.segment<3>(0) = weighted_traction; res(3) = weights;
     res *= step;
@@ -212,13 +230,11 @@ T PBCevaluation::computeWeightedStrain(const TV sample_loc, TV direction){
         {T strain = ((direction.segment<2>(0)).transpose()) * (GS * direction.segment<2>(0));
         weighted_strain += strain * gaussian_kernel(sample_loc, point);
         weights += gaussian_kernel(sample_loc, point);}
-        if(pointInVisualTriangle(sample[1].segment<2>(0)) == pointInVisualTriangle(sample_loc.segment<2>(0))){
-            // std::cout << pointInVisualTriangle(sample[1].segment<2>(0)) << std::endl;
-            // if(pointInTriangle(point.segment<2>(0)) == 1) std::cout << gaussian_kernel(sample_loc, point) << std::endl;
-            kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))] = 
-                std::max(kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))], 
-                         gaussian_kernel(sample_loc, point));
-        }
+        // if(pointInVisualTriangle(sample[1].segment<2>(0)) == pointInVisualTriangle(sample_loc.segment<2>(0))){
+        //     kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))] = 
+        //         std::max(kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))], 
+        //                  gaussian_kernel(sample_loc, point));
+        // }
     }
     Vector<T, 2> res; res(0) = weighted_strain; res(1) = weights;
     res *= step;
@@ -272,6 +288,26 @@ int PBCevaluation::pointInVisualTriangle(const TV2 sample_loc){
     }
 
     return -1;
+}
+
+Vector<T,3> PBCevaluation::pointPosInVisualTriangle(const TV2 sample_loc){
+    for (int i = 0; i < visual_faces.rows(); i++){
+        Matrix<T, 3, 2> undeformed_vertices = getVisualFaceVtxUndeformed(i).block(0,0,3,2);
+
+        TV2 X0 = undeformed_vertices.row(0); TV2 X1 = undeformed_vertices.row(1); TV2 X2 = undeformed_vertices.row(2);
+        TM2 X; X.col(0) = (X1-X0); X.col(1) = (X2-X0); 
+        T denom = X.determinant();
+        X.col(0) = (X1-sample_loc); X.col(1) = (X2-sample_loc); 
+        T alpha = X.determinant()/denom;
+        X.col(0) = (X1-X0); X.col(1) = (sample_loc-X0); 
+        T beta = X.determinant()/denom;
+        T gamma = 1-alpha-beta;
+
+        if (alpha >= 0 && beta >= 0 && gamma >= 0) {
+            TV pos; pos.setZero(); pos.segment<2>(0) = alpha*X0 + gamma*X1 + beta*X2;  
+            return pos;  
+        }
+    }
 }
 
 std::vector<Matrix<T, 2, 2>> PBCevaluation::returnStressTensors(int A){
