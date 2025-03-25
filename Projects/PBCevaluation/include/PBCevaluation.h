@@ -37,13 +37,15 @@ public:
 public:
 
 	// kernel
-    double std = 0.001;
+    double std = 100;
+	int num_directions = 12;
 
 	// visualization
     MatrixXi visual_faces;
     MatrixXT visual_undeformed;
 	std::string tag_file;
     std::string mesh_file;
+	std::string mesh_info;
 	VectorXi face_tags;
 	VectorXT nu_visualization;
     VectorXT E_visualization;
@@ -60,6 +62,7 @@ public:
 
 	TV2 transformation;
 
+	void initializeFromDir(std::string mesh_info_dir, std::string exp = "exp1/");
 	void initializeVisualizationMesh(std::string filename);
 	void visualizeMaterialProperties();
 	void visualizeKernelWeighting();
@@ -115,6 +118,22 @@ public:
 		}
 	
 		return matrices;
+	}
+
+	std::vector<T> read_local_properties(const std::string& filename) {
+		std::vector<T> properties;
+		std::ifstream in_file(filename);
+		if (!in_file) {
+			std::cerr << "Error opening file for reading: " << filename << std::endl;
+			return properties;
+		}
+	
+		T a;
+		while (in_file >> a) {
+			properties.push_back(a);
+		}
+	
+		return properties;
 	}
 
 	PBCevaluation() {} 

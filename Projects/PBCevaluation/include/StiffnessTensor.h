@@ -15,11 +15,7 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
     for(int i = 0; i < c; ++i){
         Simulation sim_t;
         sim_t.std = sim.std;
-        std::string mesh_info = "../../../Projects/PBCevaluation/data/";
-        sim_t.tag_file = mesh_info+"meta_periodic_face_tags.csv";
-        sim_t.initializeVisualizationMesh(mesh_info+"pbc_visual.obj");
-        std::string undeformed_mesh = mesh_info+"pbc_undeformed.obj";
-        sim_t.initializeMeshInformation(undeformed_mesh, mesh_info+"exp"+std::to_string(i+1)+"/");
+        sim_t.initializeFromDir(sim.mesh_info, "exp"+std::to_string(i+1)+"/");
         for(int f = 0; f < F.rows(); ++f){
             Matrix<T, 3, 3> undeformed_vertices = sim_t.getVisualFaceVtxUndeformed(f);
             Vector<T,3> sample_location = sim_t.triangleCenterofMass(undeformed_vertices);
@@ -59,7 +55,7 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
     Eigen::VectorXd b(3*c);
 
     for(int i = 0; i < c; ++i){
-        std::string mesh_info = "../../../Projects/PBCevaluation/data/";
+        std::string mesh_info = sim.mesh_info;
         Matrix<T,2,2> approx_stress = sim.read_matrices(mesh_info+"exp"+std::to_string(i+1)+"/"+"pbc_homo_stress.dat")[0];
         Matrix<T,2,2> approx_strain = sim.read_matrices(mesh_info+"exp"+std::to_string(i+1)+"/"+"pbc_homo_strain.dat")[0];
 
@@ -83,7 +79,7 @@ std::vector<Matrix<T, 3, 3>> findStiffnessTensor(std::string file_name, Simulati
     std::cout << "Stiffness C from homogenization: \n" << fitted_symmetric_tensor << std::endl;    
     
     for(int i = 0; i < c; ++i){
-        std::string mesh_info = "../../../Projects/PBCevaluation/data/";
+        std::string mesh_info = sim.mesh_info;
         Matrix<T,2,2> approx_stress = sim.read_matrices(mesh_info+"exp"+std::to_string(i+1)+"/"+"window_homo_stress.dat")[0];
         Matrix<T,2,2> approx_strain = sim.read_matrices(mesh_info+"exp"+std::to_string(i+1)+"/"+"window_homo_strain.dat")[0];
 

@@ -1,6 +1,14 @@
 #include "../include/PBCevaluation.h"
 #include <igl/readOBJ.h>
 
+void PBCevaluation::initializeFromDir(std::string mesh_info_dir, std::string exp){
+    mesh_info = mesh_info_dir;
+	tag_file = mesh_info+"meta_periodic_face_tags.csv";
+	initializeVisualizationMesh(mesh_info+"pbc_visual.obj");
+	std::string undeformed_mesh = mesh_info+"pbc_undeformed.obj";
+    initializeMeshInformation(undeformed_mesh, mesh_info+exp);
+}
+
 void PBCevaluation::initializeVisualizationMesh(std::string filename){
     MatrixXT V; MatrixXi F;
     igl::readOBJ(filename, V, F);
@@ -31,9 +39,9 @@ void PBCevaluation::initializeVisualizationMesh(std::string filename){
 
     kernel_coloring_prob = VectorXT::Zero(F.rows());
     kernel_coloring_avg = VectorXT::Zero(F.rows());
-    sample = std::vector<TV>(2);
-    sample[1] = triangleCenterofMass(getVisualFaceVtxUndeformed(1716));
-    setProbingLineDirections(15);
+    sample = std::vector<TV>(1);
+    sample[0] = triangleCenterofMass(getVisualFaceVtxUndeformed(1010));
+    setProbingLineDirections(num_directions);
 
     nu_visualization = VectorXT::Zero(F.rows());
     E_visualization = VectorXT::Zero(F.rows());
@@ -42,9 +50,10 @@ void PBCevaluation::initializeVisualizationMesh(std::string filename){
 
 void PBCevaluation::visualizeMaterialProperties(){
     
+    std::vector<T> prop = read_local_properties(mesh_info+"local_material_properties.dat");
     for(int i = 0; i < nu_visualization.size(); ++i){
-        T thickness = 0.003;
-        T E = 1e6*thickness, nu = 0.0;
+        T thickness = prop[2];
+        T E = prop[0]*thickness, nu = prop[1];
         T factor = 10;
         if(face_tags[i] % 2 == 0) {
             E /= factor;
@@ -65,13 +74,13 @@ void PBCevaluation::visualizeKernelWeighting(){
     };
 
     for(int j = 0; j < direction.size(); ++j){
-        T step = 5;
+        T step = 1;
         int n = 4*std/step; // Discretization points for cut segment
         for(int i = -n; i <= n; ++i){
-            TV point = sample[1] + i*direction[j]*step;
+            TV point = sample[0] + i*direction[j]*step;
             kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))] = 
                 std::max(kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))], 
-                        gaussian_kernel(sample[1], point));
+                        gaussian_kernel(sample[0], point));
         }
     }
 }
@@ -187,7 +196,7 @@ Vector<T, 3> PBCevaluation::computeWeightedStress(const TV sample_loc, TV direct
 
     TV weighted_traction = TV::Zero();
     T weights = 0;
-    T step = 5;
+    T step = 2;
     int n = 4*std/step; // Discretization points for cut segment
 
     for(int i = -n; i <= n; ++i){
@@ -221,7 +230,7 @@ T PBCevaluation::computeWeightedStrain(const TV sample_loc, TV direction){
 
     T weighted_strain = 0;
     T weights = 0;
-    T step = 5;
+    T step = 2;
     int n = 4*std/step; // Discretization points for cut segment
     for(int i = -n; i <= n; ++i){
         TV point = sample_loc + i*direction*step;
@@ -230,11 +239,6 @@ T PBCevaluation::computeWeightedStrain(const TV sample_loc, TV direction){
         {T strain = ((direction.segment<2>(0)).transpose()) * (GS * direction.segment<2>(0));
         weighted_strain += strain * gaussian_kernel(sample_loc, point);
         weights += gaussian_kernel(sample_loc, point);}
-        // if(pointInVisualTriangle(sample[1].segment<2>(0)) == pointInVisualTriangle(sample_loc.segment<2>(0))){
-        //     kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))] = 
-        //         std::max(kernel_coloring_prob[pointInVisualTriangle(point.segment<2>(0))], 
-        //                  gaussian_kernel(sample_loc, point));
-        // }
     }
     Vector<T, 2> res; res(0) = weighted_strain; res(1) = weights;
     res *= step;
