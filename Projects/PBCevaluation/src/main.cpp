@@ -5,7 +5,7 @@ int main()
 {
 
 	PBCevaluation pbcevaluation;
-	std::string mesh_info = "../../../Projects/PBCevaluation/data/Material2/";
+	std::string mesh_info = "../../../Projects/PBCevaluation/data/Material4/";
 	pbcevaluation.initializeFromDir(mesh_info);
 	App<PBCevaluation> app(pbcevaluation);
 	app.initializeScene();
