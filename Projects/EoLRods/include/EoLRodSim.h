@@ -99,7 +99,7 @@ public:
     IV3Stack rods;
     IV4Stack connections;
     TV3Stack normal;
-    int n_nodes;
+    int n_nodes = -1;
     int n_dof;
     int n_rods;
     int n_pb_cons;
@@ -113,7 +113,7 @@ public:
     int final_3;
 
     T dt = 1;
-    T newton_tol = 1e-4;
+    T newton_tol = 1e-7;
     T E = 3.5e9; //PLA
     T R = 0.0002;
 
@@ -205,6 +205,11 @@ public:
     std::vector<TV> targets;
 
     std::vector<T> residual_norms;
+
+    // Stress Probes
+    std::vector<TV> sample_locations;
+    std::vector<TV> line_directions;
+
 public:
 
     EoLRodSim()
@@ -514,6 +519,26 @@ public:
     void add3DBendingAndTwistingForce(Eigen::Ref<VectorXT> residual);
     void add3DBendingAndTwistingK(std::vector<Entry>& entry_K);
 
+    // RodStress.cpp
+    using MatrixXT = Matrix<T, Eigen::Dynamic, Eigen::Dynamic>;
+    bool lineCutRodinSegment(Rod* rod, TV sample_loc, TV direction, std::vector<int>& cut_segments, std::vector<T>& cut_point_barys);
+    Vector<T,2> solveLineIntersection(const TV sample_point, const TV line_direction, const TV v1, const TV v2);
+    Matrix<T, 3, 3> computeSecondPiolaStress(Rod* rod, int rod_idx, TV2 cross_section_coord);
+    Vector<T, 3> computeWeightedStress(const TV sample_loc, const TV direction);
+    Matrix<T, 3, 3> findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions);
+    Vector<T,3> integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample);
+    Vector<T, 3> computeBoundaryStress();
+    Vector<T, 3> computeVerticalBoundaryStress();
+    T integrateKernelOverDomain(const TV sample_loc, const TV line_direction);
+    void computeUndeformedBoundingBox(TV& bottom_left, TV& top_right) const;
+    Matrix<T, 3, 3> computeWeightedDeformationGradient(const TV sample_loc, const std::vector<TV> line_directions);
+    Matrix<T, 3, 3> computeNodeStress(const int node_idx);
+
+    // ConstitutiveLaw.cpp
+    Matrix<T, 3, 3> computeGreenLagrangianStrain(const TV sample_loc, const std::vector<TV> line_directions);
+
+    //WindowHomogenization.cpp
+    Matrix<T, 3, 3> computeWindowHomogenization(TV window_top_right, TV window_bottom_left);
 };
 
 #endif

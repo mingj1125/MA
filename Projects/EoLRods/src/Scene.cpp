@@ -2,8 +2,12 @@
 #include "../include/Util.h"
 #include "../include/HybridC2Curve.h"
 
-static double ROD_A = 2.5e-4;
-static double ROD_B = 2.5e-4;
+// for processing mesh to rod network
+#include <igl/readOBJ.h>
+#include <unordered_set>
+
+static double ROD_A = 3e-4;
+static double ROD_B = 3e-4;
 
 void Scene::buildOneCrossSceneCurved(int sub_div)
 {
@@ -445,7 +449,8 @@ void Scene::buildOneCrossScene(int sub_div)
     sim.dq = VectorXT::Zero(dof_cnt);
 }
 
-void Scene::buildGridScene(int sub_div)
+
+void Scene::buildGridScene(int sub_div, bool bc_data)
 {
     auto unit_yarn_map = sim.yarn_map;
     sim.yarn_map.clear();
@@ -458,6 +463,8 @@ void Scene::buildGridScene(int sub_div)
     sim.add_contact_penalty=true;
     sim.new_frame_work = true;
     sim.add_eularian_reg = false;
+    sim.add_bending = false;
+    sim.add_twisting = false;
 
     sim.ke = 1e-4;
 
@@ -627,16 +634,16 @@ void Scene::buildGridScene(int sub_div)
     }
     
 
-    T r = 0.05 * sim.unit;
+    T r = 0.02 * sim.unit;
     TV center1, center2;
     sim.getCrossingPosition(0, center1);
     sim.getCrossingPosition(n_row * n_col - 1, center2);
 
-    TV delta1 = TV(-0.05, -0.05, -1e-2) * sim.unit;
+    TV delta1 = TV(-0.1, -0.1, -1e-2)*2 * sim.unit;
 
     auto circle1 = [r, center1, delta1](const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {
-        mask = Vector<bool, 3>(true, true, true);
+        mask = Vector<bool, 3>(true, false, true);
         delta = delta1;
         return (x - center1).norm() < r;
     };
@@ -644,7 +651,7 @@ void Scene::buildGridScene(int sub_div)
     TV delta2 = TV(0.0, 0.0, 0) * sim.unit;
     auto circle2 = [r, center2, delta2](const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {
-        mask = Vector<bool, 3>(true, true, true);
+        mask = Vector<bool, 3>(true, false, true);
         delta = delta2;
         return (x - center2).norm() < r;
 
@@ -652,12 +659,45 @@ void Scene::buildGridScene(int sub_div)
     
     TV bottom_left, top_right;
     sim.computeBoundingBox(bottom_left, top_right);
-    TV shear_y_left = TV(0.0, 0.5, 0.1) * sim.unit;
-    TV shear_y_right = TV(0.0, 0.0, 0) * sim.unit;
+    TV shear_y_down = TV(0., -0.6, 0.0) * sim.unit;
+    // TV shear_y_down = TV(std::sqrt(2)*1.6/2, -1.6*std::sqrt(2)/2+1, 0.0) * sim.unit;
+    TV shear_y_up = TV(0.0, 0.0, 0) * sim.unit;
+    TV shear_y_right = TV(0.1, 0.0, 0.0) * sim.unit;
+    TV shear_y_left = TV(-0.1, 0., 0) * sim.unit;
+    // TV shear_y_left = TV(1-std::sqrt(2)*1.6/2, -1.6*std::sqrt(2)/2, 0.0) * sim.unit;
     
-    T rec_width = 0.1 * sim.unit;
+    T rec_width = 0.0001 * sim.unit;
 
-    auto rec1 = [bottom_left, top_right, shear_y_left, rec_width](
+    auto rec_down = [bottom_left, top_right, shear_y_down, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {
+        mask = Vector<bool, 3>(true, true, true);
+        delta = shear_y_down;
+        T one_third = (top_right[1] - bottom_left[1]) / 3.0;
+        if (x[1] < bottom_left[1] + rec_width 
+            // &&
+            // (x[1] > bottom_left[1] + one_third && x[1] < bottom_left[1] + one_third * 2)
+            )
+            return true;
+        return false;
+    };
+
+    auto rec_up = [bottom_left, top_right, shear_y_up, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {
+        mask = Vector<bool, 3>(true, false, true);
+        delta = shear_y_up;
+        T one_third = (top_right[1] - bottom_left[1]) / 3.0;
+
+        if (x[1] > top_right[1] - rec_width 
+            // && 
+            // (x[1] > bottom_left[1] + one_third && x[1] < bottom_left[1] + one_third * 2)
+            )
+            return true;
+        return false;
+    };
+
+    auto rec_left = [bottom_left, top_right, shear_y_left, rec_width](
         const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {
         mask = Vector<bool, 3>(true, true, true);
@@ -671,10 +711,10 @@ void Scene::buildGridScene(int sub_div)
         return false;
     };
 
-    auto rec2 = [bottom_left, top_right, shear_y_right, rec_width](
+    auto rec_right = [bottom_left, top_right, shear_y_right, rec_width](
         const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {
-        mask = Vector<bool, 3>(true, true, true);
+        mask = Vector<bool, 3>(true, false, true);
         delta = shear_y_right;
         T one_third = (top_right[1] - bottom_left[1]) / 3.0;
 
@@ -686,11 +726,14 @@ void Scene::buildGridScene(int sub_div)
         return false;
     };
 
-    sim.fixRegionalDisplacement(circle1);
-    sim.fixRegionalDisplacement(circle2);
+    // sim.fixRegionalDisplacement(circle1);
+    // sim.fixRegionalDisplacement(circle2);
 
-    // sim.fixRegionalDisplacement(rec1);
-    // sim.fixRegionalDisplacement(rec2);
+    // sim.fixRegionalDisplacement(rec_down);
+    // sim.fixRegionalDisplacement(rec_up);
+    if(!bc_data){
+    sim.fixRegionalDisplacement(rec_left);
+    sim.fixRegionalDisplacement(rec_right);}
 
 
     sim.fixCrossing();
@@ -709,6 +752,7 @@ void Scene::buildGridScene(int sub_div)
     }
 
     sim.dq = VectorXT::Zero(dof_cnt);
+    sim.n_nodes = node_cnt;
 }
 
 void Scene::buildFullScaleSquareScene(int sub_div)
@@ -1833,9 +1877,10 @@ void Scene::buildStraightRodScene(int sub_div)
     int full_dof_cnt = 0;
     int node_cnt = 0;
     int rod_cnt = 0;
-    
+
+    sim.unit = 0.09;
     TV from = TV(0, 0.5, 0) * sim.unit;
-    TV to = TV(2, 0.5001, 0.001) * sim.unit;
+    TV to = TV(1, 0.5, 0.0) * sim.unit;
 
     std::vector<int> passing_points_id;
     std::vector<TV> passing_points;
@@ -1871,11 +1916,217 @@ void Scene::buildStraightRodScene(int sub_div)
     Offset end0, end1;
     sim.Rods[0]->frontOffset(end0); sim.Rods[0]->backOffset(end1);
     sim.pbc_pairs_reference[0] = std::make_pair(std::make_pair(end0, end1), std::make_pair(0, 0));
-
-    sim.Rods[0]->fixPointLagrangian(0, TV::Zero(), sim.dirichlet_dof);
-    sim.Rods[0]->fixPointLagrangian(1, TV::Zero(), sim.dirichlet_dof);
+    
+    TV delta1 = TV(-0.6, 0., 0) * sim.unit;
+    // TV delta1 = TV(1-1.6*std::sqrt(2)/2, -1.6*std::sqrt(2)/2, 0) * sim.unit;
+    sim.Rods[0]->fixPointLagrangian(0, delta1, sim.dirichlet_dof);
+    // std::cout << "Rod index: \n";
+    // for (auto idx: sim.Rods[0]->indices){
+    //     std::cout << idx << std::endl;
+    // }
+    sim.Rods[0]->fixPointLagrangian(sim.Rods[0]->indices.size()-1, TV::Zero(), sim.dirichlet_dof);
 
     sim.dq = VectorXT::Zero(dof_cnt);
+}
+
+struct MeshEdge{
+    int u_, v_;
+
+    bool operator==(const MeshEdge& other) const {
+        return (u_ == other.u_ && v_ == other.v_) || (u_ == other.v_ && v_ == other.u_);
+    }
+    MeshEdge(int u, int v): u_(u), v_(v){}
+};
+
+struct MeshEdgeHash {
+    size_t operator()(const MeshEdge& e) const {
+        return std::hash<int>()(e.u_) ^ std::hash<int>()(e.v_);
+    }
+};
+
+void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_data){
+    
+    Eigen::MatrixXd V; Eigen::MatrixXi F;
+    igl::readOBJ(filename, V, F);
+    sim.n_nodes = V.rows();
+    TV min_corner = V.colwise().minCoeff();
+    TV max_corner = V.colwise().maxCoeff();
+    T length = max_corner(0)-min_corner(0);
+    V /= length;
+    std::unordered_set<MeshEdge, MeshEdgeHash> edges;
+    for(int i = 0; i < F.rows(); ++i){
+        Eigen::Vector<int, 3> face = F.row(i);
+        edges.insert(MeshEdge(face(0), face(1)));
+        edges.insert(MeshEdge(face(0), face(2)));
+        edges.insert(MeshEdge(face(2), face(1)));
+    }
+
+    auto unit_yarn_map = sim.yarn_map;
+    sim.yarn_map.clear();
+    
+    clearSimData();
+
+    sim.add_rotation_penalty = false;
+    sim.add_pbc_bending = false;
+    sim.add_pbc_twisting = false;
+    sim.add_pbc = false;
+
+    sim.add_contact_penalty=false;
+    sim.new_frame_work = false;
+    sim.add_eularian_reg = false;
+    sim.add_bending = false;
+    sim.add_twisting = false;
+
+    sim.ke = 1e-6;
+
+    sim.unit = 1.0;
+
+    std::vector<Eigen::Triplet<T>> w_entry;
+    int full_dof_cnt = 0;
+    int node_cnt = 0;
+    int rod_cnt = 0;
+
+    std::vector<TV> nodal_positions;
+
+    auto addCrossingData = [&](int crossing_idx, int rod_idx, int location)
+    {
+        sim.rod_crossings[crossing_idx]->is_fixed = true;
+        sim.rod_crossings[crossing_idx]->rods_involved.push_back(rod_idx);
+        sim.rod_crossings[crossing_idx]->on_rod_idx[rod_idx] = location;
+        sim.rod_crossings[crossing_idx]->sliding_ranges.push_back(Range::Zero());
+    };
+
+    for(int i = 0; i < V.rows(); ++i){
+        TV node_pos = V.row(i); 
+        addCrossingPoint(nodal_positions, node_pos, full_dof_cnt, node_cnt);
+    }
+
+    for(auto edge: edges){
+        TV node1 = V.row(edge.u_);
+        TV node2 = V.row(edge.v_);
+        if(node1(0) > node2(0)) {
+            std::swap(node1, node2);
+            std::swap(edge.u_, edge.v_);
+        }
+
+        addAStraightRod(node1, node2, {node1, node2}, {edge.u_, edge.v_}, sub_div,
+        full_dof_cnt, node_cnt, rod_cnt);
+
+        addCrossingData(edge.u_, rod_cnt - 1, 0);
+        addCrossingData(edge.v_, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
+    }
+
+    for (auto& rod : sim.Rods)
+        rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
+
+    int dof_cnt = 0;
+    markCrossingDoF(w_entry, dof_cnt);
+    // std::cout << "mark dof" << std::endl;
+    for (auto& rod : sim.Rods) rod->markDoF(w_entry, dof_cnt);
+    
+    appendThetaAndJointDoF(w_entry, full_dof_cnt, dof_cnt);
+    
+    sim.rest_states = deformed_states;
+    
+    sim.W = StiffnessMatrix(full_dof_cnt, dof_cnt);
+    sim.W.setFromTriplets(w_entry.begin(), w_entry.end());
+    
+    for (auto& rod : sim.Rods)
+    {
+        rod->fixEndPointEulerian(sim.dirichlet_dof);
+        rod->setupBishopFrame();
+    }
+    
+    if (sim.add_pbc)
+        sim.Rods[0]->fixPointLagrangianByID(0, TV::Zero(), Mask::Ones(), sim.dirichlet_dof);
+
+    TV bottom_left, top_right;
+    sim.computeBoundingBox(bottom_left, top_right);
+
+    // TV shear_x_right = TV(0.1, 0.2516685, 0.0) * sim.unit;
+    TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
+    TV shear_x_left = TV(-0.1, 0.0, 0) * sim.unit;
+
+
+    T rec_width = 0.0001 * sim.unit;
+
+    auto rec1 = [bottom_left, top_right, shear_x_left, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {
+        mask = Vector<bool, 3>(true, true, true);
+        // mask = Vector<bool, 3>(true, true, true);
+        // double tol = 1e-5;
+        // if(x[0] < bottom_left[0]+tol && x[1]>top_right[1]-tol) mask = Vector<bool, 3>(true, true, true);
+        // else if(x[0] > top_right[0]-tol && x[1]>top_right[1]-tol) mask = Vector<bool, 3>(true, true, true);
+        // else mask = Vector<bool, 3>(true, false, true);
+        delta = shear_x_left;
+        if (x[0] < bottom_left[0] + rec_width)
+            return true;
+        return false;
+    };
+
+    auto rec2 = [bottom_left, top_right, shear_x_right, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {   
+        mask = Vector<bool, 3>(true, true, true);
+        // mask = Vector<bool, 3>(true, true, true);
+        // double tol = 1e-5;
+        // if(x[0] < bottom_left[0]+tol && x[1]>top_right[1]-tol) mask = Vector<bool, 3>(true, true, true);
+        // else if(x[0] > top_right[0]-tol && x[1]>top_right[1]-tol) mask = Vector<bool, 3>(true, true, true);
+        // else mask = Vector<bool, 3>(true, false, true);
+        delta = shear_x_right;
+
+        if (x[0] > top_right[0] - rec_width)
+            return true;
+        return false;
+    };
+
+    if (!bc_data)
+    {
+        sim.fixRegionalDisplacement(rec2);
+        sim.fixRegionalDisplacement(rec1);
+    }
+    TV shear_x_down = TV(0.0, -0.1, 0.0) * sim.unit;
+    TV shear_x_up = TV(0.0, 0.1, 0) * sim.unit;
+    auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {
+        // mask = Vector<bool, 3>(true, false, true);
+        mask = Vector<bool, 3>(true, true, true);
+        delta = shear_x_down;
+        if (x[1] < bottom_left[1] + rec_width)
+            return true;
+        return false;
+    };
+
+    auto rec4 = [bottom_left, top_right, shear_x_up, rec_width](
+        const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
+    {   
+        // mask = Vector<bool, 3>(true, false, true);
+        mask = Vector<bool, 3>(true, true, true);
+        delta = shear_x_up;
+
+        if (x[1] > top_right[1] - rec_width)
+            return true;
+        return false;
+    };
+    // sim.fixRegionalDisplacement(rec3);
+    // sim.fixRegionalDisplacement(rec4);
+
+    sim.fixCrossing();
+    // std::cout << "fix crossing" << std::endl;
+    sim.perturb = VectorXT::Zero(sim.W.cols());
+    for (auto& crossing : sim.rod_crossings)
+    {
+        Offset off;
+        sim.Rods[crossing->rods_involved.front()]->getEntry(crossing->node_idx, off);
+        T r = static_cast <T> (rand()) / static_cast <T> (RAND_MAX);
+        int z_off = sim.Rods[crossing->rods_involved.front()]->reduced_map[off[3-1]];
+        sim.perturb[z_off] += 0.001 * (r - 0.5) * sim.unit;
+        
+    }
+    sim.dq = VectorXT::Zero(dof_cnt);
+
 }
 
 void Scene::clearSimData()

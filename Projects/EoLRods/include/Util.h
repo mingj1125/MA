@@ -19,8 +19,8 @@ inline T signedAngle(const Eigen::Vector3d& u, const Eigen::Vector3d& v, const E
   return angle;
 }
 
-
-inline bool colinear(Eigen::Vector3d a, Eigen::Vector3d b)
+template<int dim>
+inline bool colinear(Vector<T, dim> a, Vector<T, dim> b)
 {
     if((a-b).norm()<1e-2)
 		return true;

@@ -32,11 +32,15 @@ public:
     // ------------------------------- Scene Setup -------------------------------
     void buildInterlockingSquareScene(int sub_div);
     void buildStraightRodScene(int sub_div);
-    void buildGridScene(int sub_div);
+    void buildGridScene(int sub_div, bool bc_data = false);
     void buildFullScaleSquareScene(int sub_div);
     void buildFullCircleScene(int sub_div);
     void buildOneCrossScene(int sub_div);
     void buildOneCrossSceneCurved(int sub_div);
+    void buildFEMRodScene(const std::string& filename, int sub_div, bool bc_data = false);
+
+    // ------------------------------- Scene Property -------------------------------
+    Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions);
 
 private:
 

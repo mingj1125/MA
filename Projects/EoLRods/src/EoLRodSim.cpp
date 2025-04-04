@@ -806,7 +806,35 @@ bool EoLRodSim::advanceOneStep(int step)
         << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol || step == max_newton_iter)
-    {
+    {   
+        // TV sample_location = TV::Zero();
+        // TV top_right, bottom_left;
+        // computeUndeformedBoundingBox(bottom_left, top_right);
+        // sample_location = (bottom_left + top_right)/2;//+(top_right-bottom_left)*0.1;
+        // std::cout << "location: " << sample_location.transpose() << std::endl;
+
+        // T angle = M_PI/2;
+        // TV direction; direction << std::cos(angle), std::sin(angle), 0;
+        // std::cout << "Weighted Piola Stress: \n" << computeWeightedStress(sample_location, direction).transpose() << std::endl;
+        // direction << std::cos(-angle), std::sin(-angle), 0;
+        // std::cout << "Weighted Piola Stress: \n" << computeWeightedStress(sample_location, direction).transpose() << std::endl;
+        // std::cout << "nodel stress: \n" << computeNodeStress(34) << std::endl;
+
+        // std::vector<TV> ds;
+        // int num_directions = 8;
+        // for(int i = 0; i < num_directions; ++i) {T angle = i*2*M_PI/num_directions; ds.push_back(TV{std::cos(angle), std::sin(angle), 0});}
+        // auto tensor = findBestStressTensorviaProbing(sample_location, ds);
+        // std::cout << "Stress Tensor approximation: \n" << tensor << std::endl;
+        // auto F = computeWeightedDeformationGradient(sample_location, ds);
+        // auto cauchy_stress = F*tensor*F.transpose()/F.determinant();
+        // std::cout << "Cauchy Stress Tensor approximation: \n" << cauchy_stress << std::endl;
+
+        // std::cout << "Window approximation: \n" << computeWindowHomogenization((top_right+bottom_left)/2+(top_right-bottom_left)*0.05, (top_right+bottom_left)/2-(top_right-bottom_left)*0.05) << std::endl;
+
+        // std::cout << "E approximation: \n" << 0.5*(F.transpose()*F-TM::Identity())<< std::endl;
+        std::cout << "Boundary stress: " << computeBoundaryStress().transpose() << std::endl;
+        std::cout << "Vertical boundary stress: " << computeVerticalBoundaryStress().transpose() << std::endl;
+        // std::cout << "Approximated F: \n" << computeWeightedDeformationGradient(sample_location, directions) << std::endl;
         return true;
     }
 

@@ -74,6 +74,7 @@ public:
     T a = 1e-4, b = 1e-4;
 
     T E = 3.5e9;
+    T poisson_ratio = 0;
     // T E = 1e5;
     T ks;
     T kt;
@@ -434,7 +435,8 @@ public:
         
         ks = E * M_PI * a * b;
 
-        T G = E/T(2)/(1.0 + 0.42);
+        // T G = E/T(2)/(1.0 + 0.42);
+        T G = E/T(2)/(1.0+poisson_ratio);
 
         // T G = 1e7;
 
