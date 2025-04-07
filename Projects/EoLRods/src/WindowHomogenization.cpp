@@ -90,11 +90,11 @@ Matrix<T, 3, 3> EoLRodSim::computeWindowHomogenization(TV window_top_right, TV w
             rod->X(rod->indices[i], node_i); rod->X(rod->indices[i+1], node_j);
             if(pointInsideWindow(node_i, window_top_right, window_bottom_left)){
                 if(pointInsideWindow(node_j, window_top_right, window_bottom_left)){
-                    homogenised_S += computeSecondPiolaStress(rod, i, {0,0}) * (node_i-node_j).norm()*2*rod->a;
+                    homogenised_S += computeSecondPiolaStress(rod, i, {0,0}) * (node_i-node_j).norm()*2*rod->b;
                     // total_area += (node_i-node_j).norm()*2*rod->a;
                 } else {
                     homogenised_S += computeSecondPiolaStress(rod, i, {0,0}) * 
-                    lengthInsideWindow(node_i, node_j, window_top_right, window_bottom_left)*2*rod->a;
+                    lengthInsideWindow(node_i, node_j, window_top_right, window_bottom_left)*2*rod->b;
                     // total_area += lengthInsideWindow(node_i, node_j, window_top_right, window_bottom_left)*2*rod->a;
                     // std::cout <<  lengthInsideWindow(node_i, node_j, window_top_right, window_bottom_left) << std::endl;
                     // std::cout <<  2*rod->a << std::endl;
@@ -104,7 +104,7 @@ Matrix<T, 3, 3> EoLRodSim::computeWindowHomogenization(TV window_top_right, TV w
             else if(pointInsideWindow(node_j, window_top_right, window_bottom_left)){
                 if(!pointInsideWindow(node_i, window_top_right, window_bottom_left)){
                     homogenised_S += computeSecondPiolaStress(rod, i, {0,0}) * 
-                    lengthInsideWindow(node_j, node_i, window_top_right, window_bottom_left)*2*rod->a;
+                    lengthInsideWindow(node_j, node_i, window_top_right, window_bottom_left)*2*rod->b;
                     // total_area += lengthInsideWindow(node_j, node_i, window_top_right, window_bottom_left)*2*rod->a;
                     // std::cout <<  lengthInsideWindow(node_j, node_i, window_top_right, window_bottom_left) << std::endl;
                 }
@@ -112,7 +112,7 @@ Matrix<T, 3, 3> EoLRodSim::computeWindowHomogenization(TV window_top_right, TV w
             } else {
                 // part of the segment inside the window
                 homogenised_S += computeSecondPiolaStress(rod, i, {0,0}) * 
-                    partInsideWindow(node_j, node_i, window_top_right, window_bottom_left)*2*rod->a;
+                    partInsideWindow(node_j, node_i, window_top_right, window_bottom_left)*2*rod->b;
                 // S += computeSecondPiolaStress(rod, i, {0,0}) * (partInsideWindow(node_j, node_i, window_top_right, window_bottom_left) > 0);    
             }
         }

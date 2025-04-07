@@ -6,8 +6,8 @@
 #include <igl/readOBJ.h>
 #include <unordered_set>
 
-static double ROD_A = 3e-4;
-static double ROD_B = 3e-4;
+// static double ROD_A = 3e-4;
+// static double ROD_B = 3e-4;
 
 void Scene::buildOneCrossSceneCurved(int sub_div)
 {
@@ -448,7 +448,6 @@ void Scene::buildOneCrossScene(int sub_div)
     }
     sim.dq = VectorXT::Zero(dof_cnt);
 }
-
 
 void Scene::buildGridScene(int sub_div, bool bc_data)
 {
@@ -1469,7 +1468,6 @@ void Scene::buildFullScaleSquareScene(int sub_div)
     sim.dq = VectorXT::Zero(dof_cnt);
 }
 
-
 void Scene::buildFullCircleScene(int sub_div)
 {
     auto unit_yarn_map = sim.yarn_map;
@@ -1948,6 +1946,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
     
     Eigen::MatrixXd V; Eigen::MatrixXi F;
     igl::readOBJ(filename, V, F);
+    mesh_file = filename;
     sim.n_nodes = V.rows();
     TV min_corner = V.colwise().minCoeff();
     TV max_corner = V.colwise().maxCoeff();
@@ -2043,9 +2042,10 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
     TV bottom_left, top_right;
     sim.computeBoundingBox(bottom_left, top_right);
 
-    // TV shear_x_right = TV(0.1, 0.2516685, 0.0) * sim.unit;
-    TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
-    TV shear_x_left = TV(-0.1, 0.0, 0) * sim.unit;
+    // TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
+    // TV shear_x_left = TV(-0.1, 0.0, 0) * sim.unit;
+    TV shear_x_right = TV(0.0, 0.01, 0.0) * sim.unit;
+    TV shear_x_left = TV(0.0, 0.0, 0) * sim.unit;
 
 
     T rec_width = 0.0001 * sim.unit;

@@ -32,7 +32,6 @@ public:
 
     T t = 0;
 
-    bool animate_modes = false;
     bool run_sim = false;
     int modes = 0;
     Eigen::MatrixXd eigen_vectors;
@@ -42,11 +41,13 @@ public:
     Eigen::MatrixXd meshV_deformed;
     Eigen::MatrixXi meshF;
     bool use_mesh = false;
+    std::string mesh_name;
+    bool optimized;
 
 public:
     void initializeScene();
 
-    void initializeScene(std::string mesh_file);
+    void initializeScene(std::string mesh);
 
     void sceneCallback();
 

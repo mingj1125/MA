@@ -113,7 +113,7 @@ public:
     int final_3;
 
     T dt = 1;
-    T newton_tol = 1e-7;
+    T newton_tol = 1e-4;
     T E = 3.5e9; //PLA
     T R = 0.0002;
 
@@ -209,6 +209,7 @@ public:
     // Stress Probes
     std::vector<TV> sample_locations;
     std::vector<TV> line_directions;
+    std::vector<TV> stress_gradients_wrt_rod_thickness; // size = # rods
 
 public:
 
@@ -524,9 +525,9 @@ public:
     bool lineCutRodinSegment(Rod* rod, TV sample_loc, TV direction, std::vector<int>& cut_segments, std::vector<T>& cut_point_barys);
     Vector<T,2> solveLineIntersection(const TV sample_point, const TV line_direction, const TV v1, const TV v2);
     Matrix<T, 3, 3> computeSecondPiolaStress(Rod* rod, int rod_idx, TV2 cross_section_coord);
-    Vector<T, 3> computeWeightedStress(const TV sample_loc, const TV direction);
+    Vector<T, 3> computeWeightedStress(const TV sample_loc, const TV direction, std::vector<TV>& gradient_wrt_thickness, bool diff = false);
     Matrix<T, 3, 3> findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions);
-    Vector<T,3> integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample);
+    Vector<T,3> integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample, TV& gradient_wrt_thickness, bool diff=false);
     Vector<T, 3> computeBoundaryStress();
     Vector<T, 3> computeVerticalBoundaryStress();
     T integrateKernelOverDomain(const TV sample_loc, const TV line_direction);

@@ -1,32 +1,39 @@
 #include "../include/EoLRodSim.h"
 #include "../include/Scene.h"
+#include <fstream>
 
 Matrix<T, 3, 3> EoLRodSim::computeGreenLagrangianStrain(const TV sample_loc, const std::vector<TV> line_directions){
     TM F = computeWeightedDeformationGradient(sample_loc, line_directions);
     return 0.5*(F.transpose()*F-TM::Identity());
 }
 
-Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions){
+Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt){
 
-    std::string mesh_file = "../../../Projects/EoLRods/data/irregular_mesh_good.obj";
-    int num_test = 4;
+    int num_test = 2;
     int c = 2*num_test;
     Eigen::MatrixXd n(3, c);
     Eigen::MatrixXd t(3, c);
+    std::vector<Eigen::MatrixXd> t_diff(sim.Rods.size(), Eigen::MatrixXd(3,c));
     for(int i = 1; i <= num_test; ++i){
         EoLRodSim sim1;
         sim = sim1;
-        buildFEMRodScene(mesh_file, 0, true);
-        // buildGridScene(0, true);
+        if(mesh_file != "") buildFEMRodScene(mesh_file, 0, true);
+        else buildGridScene(0, true);
         TV bottom_left, top_right;
         sim.computeUndeformedBoundingBox(bottom_left, top_right);
         if(sample_loc.norm() <= 0) {
             sample_loc = (bottom_left + top_right)/2;
             sample_loc[0] += ((top_right-bottom_left)*0.25)[0];
         }
+        if(opt){
+            for(auto rod: sim.Rods){
+            rod->a = rods_radii(rod->rod_id);
+            rod->b = rods_radii(rod->rod_id);
+            }
+        }
 
         T rec_width = 0.0001 * sim.unit;
-        TV shear_x_right = TV(0.02*i, 0.0, 0.0) * sim.unit;
+        TV shear_x_right = TV(0.001*(i%2), 0.001*(i-1), 0.0) * sim.unit;
         TV shear_x_left = TV(0.0, 0.0, 0) * sim.unit;
 
         auto rec1 = [bottom_left, top_right, shear_x_left, rec_width](
@@ -65,13 +72,25 @@ Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vecto
 
         t.col(i-1) = TV({S(0,0), S(1,1), 2*S(1,0)});
         n.col(i-1) = TV({E(0,0), E(1,1), 2*E(1,0)});
+        for(int j = 0; j < t_diff.size(); ++j){
+            t_diff[j].col(i-1) = 2*sim.stress_gradients_wrt_rod_thickness[j];
+            t_diff[j].col(i-1)(2) *= 2;
+        }
 
         EoLRodSim sim2;
         sim = sim2;
-        buildFEMRodScene(mesh_file, 0, true);
-        // buildGridScene(0, true);
+        if(mesh_file != "") buildFEMRodScene(mesh_file, 0, true);
+        else buildGridScene(0, true);
+
+        if(opt){
+            for(auto rod: sim.Rods){
+            rod->a = rods_radii(rod->rod_id);
+            rod->b = rods_radii(rod->rod_id);
+            }
+        }
+
         TV shear_x_down = TV(0.0, 0.0, 0.0) * sim.unit;
-        TV shear_x_up = TV(0.0, 0.02*i, 0) * sim.unit;
+        TV shear_x_up = TV(0.001*(i-1), 0.001*(i%2), 0) * sim.unit;
         auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
             const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
         {
@@ -108,38 +127,162 @@ Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vecto
 
         t.col(num_test+i-1) = TV({S(0,0), S(1,1), 2*S(1,0)});
         n.col(num_test+i-1) = TV({E(0,0), E(1,1), 2*E(1,0)});
+        for(int j = 0; j < t_diff.size(); ++j){
+            t_diff[j].col(num_test+i-1) = sim.stress_gradients_wrt_rod_thickness[j];
+            t_diff[j].col(num_test+i-1)(2) *= 2;
+        }
     }
 
     // for(int i = 0; i < c; ++i){
     //     std::cout << "Stress in strain: " << n.col(i).transpose() << " is : \n" << t.col(i).transpose() << std::endl;
     // }
 
-    bool fit_symmetric_constrained = true;
     Matrix<T, 3, 3> fitted_tensor; fitted_tensor.setZero();
-    if(!fit_symmetric_constrained){
-        Eigen::MatrixXd A = n.transpose();
-        Eigen::MatrixXd b = t.transpose();
-        Eigen::MatrixXd x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
-
-        fitted_tensor = x.transpose();
-    } else {
-        Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3*c,6);
-        VectorXT b(3*c);
-        for(int i = 0; i < c; ++i){
-            Eigen::MatrixXd A_block = Eigen::MatrixXd::Zero(3,6);
-            TV normal = n.col(i);
-            A_block << normal(0), normal(1), normal(2), 0, 0, 0,
-                    0, normal(0), 0, normal(1), normal(2), 0,
-                    0, 0, normal(0), 0, normal(1), normal(2);
-            A.block(i*3, 0, 3, 6) = A_block;
-            b.segment(i*3, 3) = t.col(i);
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3*c,6);
+    VectorXT b(3*c);
+    std::vector<VectorXT> b_diff(t_diff.size(), VectorXT(3*c));
+    for(int i = 0; i < c; ++i){
+        Eigen::MatrixXd A_block = Eigen::MatrixXd::Zero(3,6);
+        TV normal = n.col(i);
+        A_block << normal(0), normal(1), normal(2), 0, 0, 0,
+                0, normal(0), 0, normal(1), normal(2), 0,
+                0, 0, normal(0), 0, normal(1), normal(2);
+        A.block(i*3, 0, 3, 6) = A_block;
+        b.segment(i*3, 3) = t.col(i);
+        for(int j = 0; j < t_diff.size(); ++j){
+            b_diff[j].segment(i*3, 3) = t_diff[j].col(i);
         }
-        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
-        fitted_tensor << x(0), x(1), x(2), 
-                        x(1), x(3), x(4),
-                        x(2), x(4), x(5);
     }
+    VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+    C_entry = x;
+    C_diff = std::vector<VectorXT>(t_diff.size());
+    for(int i = 0; i < t_diff.size(); ++i){
+        C_diff[i] =  (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
+        // std::cout << C_diff[i].transpose() << std::endl;
+    }
+
+    
+    fitted_tensor << x(0), x(1), x(2), 
+                    x(1), x(3), x(4),
+                    x(2), x(4), x(5);
 
     return fitted_tensor;
 
+}
+
+void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename){
+    int num_directions = 8;
+    std::vector<Eigen::Vector3d> directions;
+    for(int i = 0; i < num_directions; ++i) {
+        double angle = i*2*M_PI/num_directions; 
+        directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
+    }
+
+    double step = 1e-4;
+    double tol = 0.1;
+    double minVal = 0.0001;
+    rods_radii.resize(sim.Rods.size());
+    rods_radii.setConstant(3e-4);
+    Matrix<T, 3, 3> C_current;
+    for(int iter = 0; iter < 500; ++iter){
+        C_current = findBestCTensorviaProbing(target_location, directions, true);
+        VectorXT gradient_wrt_thickness(sim.Rods.size());
+        T scale = 1;
+        for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
+            T g = 0;
+            for(int j = 0; j < 6; ++j){
+                g += 2*(C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*C_diff[i](j);
+            }
+            while(abs(g)*scale > 0.1) scale /= 10;
+            gradient_wrt_thickness(i) = g;
+        }
+        if(((C_entry - stiffness_tensor).lpNorm<Eigen::Infinity>())/abs(stiffness_tensor.minCoeff()) < tol || gradient_wrt_thickness.norm() < tol) {
+            C_current = findBestCTensorviaProbing(target_location, directions, true);
+            std::cout << "Found solution at step: " << iter << std::endl; 
+            break;
+        }
+        rods_radii -= step * scale * gradient_wrt_thickness;
+        rods_radii = rods_radii.cwiseMax(minVal);
+    }
+    
+    std::cout << rods_radii.transpose() << std::endl; 
+    std::ofstream out_file(filename+"_radii.dat");
+    if (!out_file) {
+        std::cerr << "Error opening file for writing: " << filename << std::endl;
+        return;
+    }
+    out_file << rods_radii << "\n";
+    out_file.close();
+
+    std::ofstream out(filename+"_C.dat");
+    out << "Optimization location: " << target_location.transpose() << std::endl;
+    out << "Optimization target C (DoF): \n" << stiffness_tensor.transpose() << std::endl;
+    out << "Optimization result C: \n" << C_current << "\n";
+    out.close();
+    std::cout << "Optimized C: \n" << C_current << std::endl;
+    
+    
+}
+
+void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename){
+    assert(target_locations.size() == stiffness_tensors.size());
+
+    int num_directions = 8;
+    std::vector<Eigen::Vector3d> directions;
+    for(int i = 0; i < num_directions; ++i) {
+        double angle = i*2*M_PI/num_directions; 
+        directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
+    }
+
+    double step = 1e-4;
+    double tol = 0.1;
+    double minVal = 0.0001;
+    rods_radii.resize(sim.Rods.size());
+    rods_radii.setConstant(3e-4);
+    std::vector<Matrix<T, 3, 3>> C_current(target_locations.size());
+    for(int iter = 0; iter < 500; ++iter){
+        VectorXT gradient_wrt_thickness(sim.Rods.size()); gradient_wrt_thickness.setZero();
+        T scale = 1;
+        for(int i = 0; i < target_locations.size(); ++i){
+            TV target_location = target_locations[i];
+            Vector<T, 6> target_C = stiffness_tensors[i];
+            C_current[i] = findBestCTensorviaProbing(target_location, directions, true);
+            for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
+                T g = 0;
+                for(int j = 0; j < 6; ++j){
+                    g += 2*(C_entry(j) - target_C(j))/abs(target_C(j))*C_diff[i](j);
+                }
+                while(abs(g)*scale > 0.1) scale /= 10;
+                gradient_wrt_thickness(i) += g;
+            }
+        }
+        if(gradient_wrt_thickness.norm() < tol) {
+            for(int i = 0; i < target_locations.size(); ++i){
+                TV target_location = target_locations[i];
+                C_current[i] = findBestCTensorviaProbing(target_location, directions, true);
+            }
+            std::cout << "Found solution at step: " << iter << std::endl; 
+            break;
+        }
+        rods_radii -= step * scale * gradient_wrt_thickness;
+        rods_radii = rods_radii.cwiseMax(minVal);
+    }
+
+    std::ofstream out(filename+"_C.dat");
+    for(int i = 0; i < target_locations.size(); ++i){
+        C_current[i] = findBestCTensorviaProbing(target_locations[i], directions, true);
+        // std::cout << "Optimized C for location "<< target_locations[i].transpose() << ": \n" << C_current[i] << std::endl;
+        out << "Optimization location: " << target_locations[i].transpose() << std::endl;
+        out << "Optimization target C (DoF): \n" << stiffness_tensors[i].transpose() << std::endl;
+        out << "Optimization result C: \n" << C_current[i] << "\n";
+    }
+    out.close();
+    std::cout << rods_radii.transpose() << std::endl; 
+    std::ofstream out_file(filename+"_radii.dat");
+    if (!out_file) {
+        std::cerr << "Error opening file for writing: " << filename << std::endl;
+        return;
+    }
+    out_file << rods_radii << "\n";
+    out_file.close();
 }

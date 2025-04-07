@@ -50,10 +50,9 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     
     std::vector<TV> dx;
     std::vector<TV> dX;
-    T pi = M_PI;
-    T std = 0.03*unit;
-    auto gaussian_kernel = [pi, std](T distance){
-        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
+    T std = 0.1*unit;
+    auto gaussian_kernel = [std](T distance){
+        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI));
     };
 
     for(auto direction : line_directions){
@@ -186,22 +185,16 @@ Matrix<T, 3, 3> EoLRodSim::computeSecondPiolaStress(Rod* rod, int rod_idx, TV2 c
     return S;
 }
 
-Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV direction){
+Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV direction, std::vector<TV>& gradients_wrt_thickness, bool diff){
 
     TV stress = TV::Zero();
     bool cut = false;
-    // T pi = M_PI;
-    // T std = 0.0005*unit;
-    // auto gaussian_kernel = [pi, std](T distance){
-    //     return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi));
-    // };
     for(auto& rod: Rods){
         std::vector<int> cut_segments(0);
         std::vector<T> cut_point_barys;
         std::vector<TV> cut_points;
         if(lineCutRodinSegment(rod, sample_loc, direction, cut_segments, cut_point_barys)){
-            // std::cout << "Cut with Rod: " << rod->rod_id << " in " << cut_segments.size() << " locations " << std::endl;
-            // std::cout << "Rod direction: " << rod->rest_tangents[0].transpose() << std::endl;
+            
             cut = true;
 
             for(int i = 0; i < cut_segments.size(); ++i){
@@ -228,21 +221,11 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
                     auto rod_d = (Xj-cut_point).normalized();
                     if(normal.dot(rod_d) < 0.) {cut_points.pop_back();continue;}
                 }
-                // std::cout << "normal direction: " << normal.transpose()<< std::endl;
                 T cos_angle = rod->rest_tangents[rod_idx].dot(normal);
 
-                // TV2 cross_section_coord = TV2::Zero();
-                // auto S = computeSecondPiolaStress(rod, i, cross_section_coord);
-                // std::cout << "stress SN: " << (S*normal).transpose() << std::endl;
-                // stress += S*normal*gaussian_kernel(distance);
-                // // std::cout << "weight: " << gaussian_kernel(distance) << std::endl;
-
-                TV stress_ellipse;
+                TV stress_ellipse; 
                 // stress over cross section area
-                stress_ellipse = integrateOverEllipse(rod, i, cos_angle, normal, distance);
-                // if((normal-TV({0,-1,0})).norm() <= 0 && stress_ellipse.norm() > 0){
-                //     std::cout << "stress integration: " << (stress_ellipse).transpose() << std::endl;
-                //     std::cout << "rod nodes: " << node_i << " " << node_j << std::endl;}
+                stress_ellipse = integrateOverEllipse(rod, i, cos_angle, normal, distance, gradients_wrt_thickness[rod->rod_id], diff);
                 stress += stress_ellipse;
             }
         }
@@ -250,7 +233,9 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
     
     if(!cut){ std::cout << "No cut found in the direction " << direction.transpose() << "!\n";return stress;}
     T weight_sum = integrateKernelOverDomain(sample_loc, direction);
-    // std::cout << "stress in direction " << direction.transpose() << " :\n" << stress.transpose()/weight_sum << std::endl;
+    for(int i = 0; i < Rods.size(); i++){
+        gradients_wrt_thickness[i] /= weight_sum;
+    }
     // std::cout << weight_sum << std::endl;
     return stress/weight_sum;
 }
@@ -258,58 +243,60 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
 Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, const std::vector<TV> line_directions){
 
     int c = line_directions.size();
+    std::vector<MatrixXT> gradient_t(Rods.size(), MatrixXT(3,c));
     MatrixXT n(3, c);
     MatrixXT t(3, c);
     for(int i = 0; i < c; ++i){
         TV direction = line_directions.at(i);
         TV direction_normal; direction_normal = direction.cross(TV{0,0,1});
         direction_normal = direction_normal.normalized(); 
-        t.col(i) = computeWeightedStress(sample_loc, direction);
+        std::vector<TV> gradient_t_di(Rods.size(), TV::Zero());
+        t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, true);
         for(int j = 0; j < 3; ++j){if(std::abs(t.col(i)(j))< 1e-10) t.col(i)(j) = 0;}
         n.col(i) = direction_normal;
         for(int j = 0; j < 3; ++j){if(std::abs(n.col(i)(j))< 1e-10) n.col(i)(j) = 0;}
-        // std::cout << "Stress in direction normal: " << n.col(i).transpose() << " is : \n" << t.col(i).transpose() << std::endl;
-    }
-
-    bool fit_symmetric_constrained = true;
-    TM fitted_tensor; fitted_tensor.setZero();
-    if(!fit_symmetric_constrained){
-        MatrixXT A = n.transpose();
-        MatrixXT b = t.transpose();
-        MatrixXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
-
-        fitted_tensor = x.transpose();
-    } else {
-        MatrixXT A = MatrixXT::Zero(3*c,6);
-        VectorXT b(3*c);
-        for(int i = 0; i < c; ++i){
-            MatrixXT A_block = MatrixXT::Zero(3,6);
-            TV normal = n.col(i);
-            A_block << normal(0), normal(1), normal(2), 0, 0, 0,
-                    0, normal(0), 0, normal(1), normal(2), 0,
-                    0, 0, normal(0), 0, normal(1), normal(2);
-            A.block(i*3, 0, 3, 6) = A_block;
-            b.segment(i*3, 3) = t.col(i);
+        for(int j = 0; j < gradient_t.size(); ++j){
+            gradient_t[j].col(i) = gradient_t_di[j];
         }
-        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
-        fitted_tensor << x(0), x(1), x(2), 
-                        x(1), x(3), x(4),
-                        x(2), x(4), x(5);
     }
+
+    TM fitted_tensor; fitted_tensor.setZero();
+    MatrixXT A = MatrixXT::Zero(3*c,6);
+    VectorXT b(3*c);
+    std::vector<VectorXT> b_diff(Rods.size(), VectorXT(3*c));
+    for(int i = 0; i < c; ++i){
+        MatrixXT A_block = MatrixXT::Zero(3,6);
+        TV normal = n.col(i);
+        A_block << normal(0), normal(1), normal(2), 0, 0, 0,
+                0, normal(0), 0, normal(1), normal(2), 0,
+                0, 0, normal(0), 0, normal(1), normal(2);
+        A.block(i*3, 0, 3, 6) = A_block;
+        b.segment(i*3, 3) = t.col(i);
+        for(int j = 0; j < Rods.size(); ++j){
+            b_diff[j].segment(i*3, 3) = gradient_t[j].col(i);
+        }
+    }
+    VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+    stress_gradients_wrt_rod_thickness = std::vector<TV> (Rods.size(), TV::Zero());
+    for(int i = 0; i < Rods.size(); i++){
+        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
+        stress_gradients_wrt_rod_thickness[i] = {x(0), x(3), 2*x(1)};
+    }
+    fitted_tensor << x(0), x(1), x(2), 
+                    x(1), x(3), x(4),
+                    x(2), x(4), x(5);
 
     return fitted_tensor;
 }
 
 // Function to integrate over a single ellipse
-Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample){
-    std::array<double, 3> integral = {0.0, 0.0, 0.0};
+Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample, TV& gradient_wrt_thickness, bool diff){
+    TV integral = {0.0, 0.0, 0.0};
     int n = 10; // Discretization points for x
 
-    T pi = M_PI;
-    T std = 0.03*unit;
-    T width = rod->a;
-    auto gaussian_kernel = [pi, std, width](T distance){
-        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi)); /// width;
+    T std = 0.1*unit;
+    auto gaussian_kernel = [std](T distance){
+        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI)); /// width;
     };
 
     double weights = 0;
@@ -326,37 +313,25 @@ Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T
             auto S = computeSecondPiolaStress(rod, cut_idx, cross_section_coord);
             auto f_val = S * normal;
             double kernel = gaussian_kernel(center_line_distance_to_sample+x);
-            return std::array<double, 3>{f_val(0) * kernel, f_val(1) * kernel, f_val(2) * kernel};
+            return TV{f_val(0) * kernel, f_val(1) * kernel, f_val(2) * kernel};
         };
 
-        std::array<double, 3> inner_result = {0.0, 0.0, 0.0};
-        for (int j = 0; j < 3; ++j) {
-            // inner_result.at(j) = boost::math::quadrature::gauss_kronrod<double, 45>::integrate(
-            //     [=](double y) { return (inner_integral(y))[j]; }, -y_max, y_max);
-            inner_result.at(j) = (inner_integral(0))[j];
-        }
-
-        for (int j = 0; j < 3; ++j) {
-            integral[j] += inner_result[j];
-        }
+        integral += inner_integral(0);
+        if(diff && i == 0) gradient_wrt_thickness += inner_integral(0);
+        if(diff && i == n) gradient_wrt_thickness += inner_integral(0);
         weights += gaussian_kernel(center_line_distance_to_sample+x);
 
     }
 
-    for (int j = 0; j < 3; ++j) {
-        integral[j] *= 2.0 * b / n;
-    }
+    integral *= 2.0 * b / n;
     weights *= 2.0 * b / n;
     // std::cout << "Weights in rod: " << weights << std::endl;
 
-    TV res{integral.data()};
-
-    return res;
+    return integral;
 }
 
 T EoLRodSim::integrateKernelOverDomain(const TV sample_loc, const TV line_direction){
-    T pi = M_PI;
-    T std = 0.03*unit;
+    T std = 0.1*unit;
     TV bottom_left, top_right;
     computeUndeformedBoundingBox(bottom_left, top_right);
     std::vector<double> intersections(4);
@@ -374,9 +349,8 @@ T EoLRodSim::integrateKernelOverDomain(const TV sample_loc, const TV line_direct
         min = -Rods[0]->b;
         max = Rods[0]->b;
     }
-    T width = Rods[0]->a;
-    auto gaussian_kernel = [pi, std, width](T distance){
-        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * pi)) ;/// width;
+    auto gaussian_kernel = [std](T distance){
+        return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI));
     };
 
     T b = Rods[0]->b;

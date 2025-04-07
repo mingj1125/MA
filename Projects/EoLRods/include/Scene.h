@@ -22,8 +22,13 @@ public:
 
 private:
     EoLRodSim& sim;
-
+    std::string mesh_file = "";
     VectorXT& deformed_states = sim.deformed_states;
+    double ROD_A = 3e-4;
+    double ROD_B = 3e-4;
+    std::vector<VectorXT> C_diff;
+    VectorXT C_entry;
+    VectorXT rods_radii; // assume circular cross-section
     
 public:
     Scene(EoLRodSim& eol_sim) : sim(eol_sim) {}
@@ -40,7 +45,9 @@ public:
     void buildFEMRodScene(const std::string& filename, int sub_div, bool bc_data = false);
 
     // ------------------------------- Scene Property -------------------------------
-    Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions);
+    Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt = false);
+    void optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename);
+    void optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename);
 
 private:
 

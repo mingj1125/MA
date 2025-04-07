@@ -1,0 +1,14 @@
+Optimization location:  0.4 0.53    0
+Optimization target C (DoF): 
+2.3e+07   5e+06  700000   2e+07  700000   1e+07
+Optimization result C: 
+2.30086e+07 4.97453e+06      709536
+4.97453e+06 1.99862e+07      712745
+     709536      712745 1.00031e+07
+Optimization location: 0.64 0.36    0
+Optimization target C (DoF): 
+2.3e+07   5e+06  700000   2e+07  700000   1e+07
+Optimization result C: 
+2.30996e+07 4.72324e+06      697791
+4.72324e+06 1.99603e+07      701328
+     697791      701328 1.00819e+07
