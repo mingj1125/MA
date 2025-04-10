@@ -36,7 +36,7 @@ void App::sceneCallback()
             rod_network->addEdgeScalarQuantity("rod radii", radii);
 
         }
-        if(ImGui::Checkbox("Optimized", &optimized)){}
+        if(ImGui::Checkbox("Optimized", &optimized)){static_solve_step =0;}
         if (run_sim)
         {   
             if(optimized){
@@ -52,8 +52,15 @@ void App::sceneCallback()
                     rods_radii.push_back(a);
                 }
                 for(auto rod: simulation.Rods){
-                rod->a = rods_radii[rod->rod_id];
-                rod->b = rods_radii[rod->rod_id];
+                    rod->a = rods_radii[rod->rod_id];
+                    rod->b = rods_radii[rod->rod_id];
+                    rod->initCoeffs();
+                }
+            } else {
+                for(auto rod: simulation.Rods){
+                    rod->a = 3e-4;
+                    rod->b = 3e-4;
+                    rod->initCoeffs();
                 }
             }
             bool finished = simulation.advanceOneStep(static_solve_step++);

@@ -39,8 +39,12 @@ struct Pair{
     T signed_distance;
     Vector<T, 3> point_location_undeformed;
     Vector<T, 3> point_location_deformed;
+    Matrix<T, 6, 3> gradient_wrt_xij;
+    Vector<int, 6> offset_maps_xij;
 
-    Pair(T d, Vector<T, 3> loc, Vector<T, 3> loc_deformed): signed_distance(d), point_location_undeformed(loc), point_location_deformed(loc_deformed){}
+    Pair(T d, Vector<T, 3> loc, Vector<T, 3> loc_deformed, Matrix<T, 6, 3> grads, Vector<int, 6> offset): 
+        signed_distance(d), point_location_undeformed(loc), 
+        point_location_deformed(loc_deformed), gradient_wrt_xij(grads), offset_maps_xij(offset){}
     bool operator<(const Pair& other) const {
         return signed_distance < other.signed_distance;
     }
@@ -50,12 +54,15 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     
     std::vector<TV> dx;
     std::vector<TV> dX;
+    std::vector<MatrixXT> diff_b_dx(W.cols(), MatrixXT(3, line_directions.size())); // size = # directions
     T std = 0.1*unit;
     auto gaussian_kernel = [std](T distance){
         return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI));
     };
 
+    int counter_dir = 0;
     for(auto direction : line_directions){
+        std::vector<TV> dx_gradients_wrt_x(W.cols(),TV::Zero());
         bool cut = false;
         std::priority_queue<Pair> intersections;
         T weight_sum = 0;
@@ -75,11 +82,18 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
                     rod->x(node_i, xi); rod->x(node_j, xj);
                     TV cut_point = Xj + cut_point_barys[i]*(Xi-Xj);
                     TV cut_point_deformed = xj + cut_point_barys[i]*(xi-xj);
+                    Vector<int,6> offsets; 
+                    offsets.segment<3>(0) = rod->offset_map[node_i].segment<3>(0); 
+                    offsets.segment<3>(3) = rod->offset_map[node_j].segment<3>(0);
+                    Matrix<T, 6, 3> gradients;
+                    gradients.block(0, 0, 3, 3) = MatrixXT::Identity(3,3)*(cut_point_barys[i]);
+                    gradients.block(3, 0, 3, 3) = MatrixXT::Identity(3,3)*(1-cut_point_barys[i]);
 
                     T distance = (cut_point[0] - sample_loc[0])/direction[0];
+                    if(abs(direction[0]) < 1e-9) distance =  (cut_point[1] - sample_loc[1])/direction[1];
                     // std::cout << "Distance: " << distance << std::endl;
 
-                    intersections.push(Pair(distance, cut_point, cut_point_deformed));
+                    intersections.push(Pair(distance, cut_point, cut_point_deformed, gradients, offsets));
                 }
             }
         }
@@ -96,6 +110,13 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
             dx_direction += dx_seg*gaussian_kernel(distance);
             dX_direction += dX_seg*gaussian_kernel(distance);
             weight_sum += gaussian_kernel(distance);
+
+            Vector<int, 6> offset_p1 = p1.offset_maps_xij;
+            Vector<int, 6> offset_p2 = p2.offset_maps_xij;
+            for(int i = 0; i < 6; ++i){
+                dx_gradients_wrt_x[offset_p1(i)] += p1.gradient_wrt_xij.row(i)*gaussian_kernel(distance);
+                dx_gradients_wrt_x[offset_p2(i)] -= p2.gradient_wrt_xij.row(i)*gaussian_kernel(distance);
+            }
         }
         if(!cut){ 
             std::cout << "No cut found in the direction " << direction.transpose() << "!\n";
@@ -104,7 +125,11 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
         } else {
             dx.push_back(dx_direction/weight_sum);
             dX.push_back(dX_direction/weight_sum);
+            for(int i = 0; i < dx_gradients_wrt_x.size(); ++i){
+                diff_b_dx[i].col(counter_dir) = dx_gradients_wrt_x[i]/weight_sum;
+            }
         }
+        ++counter_dir;
     }
 
     MatrixXT A_dX(3, dX.size()); MatrixXT b_dx(3, dx.size());
@@ -119,6 +144,14 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     auto F = x.transpose();
     // assume constant thickness of the material 
     if(F(2,2) == 0.) F(2,2) = 1;
+
+    F_gradients_wrt_x = std::vector<TM>(W.cols());
+    for(int i = 0; i < W.cols(); ++i){
+        MatrixXT diff_b_i = diff_b_dx[i].transpose();
+        TM x = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
+        if(x(2,2) == 0.) x(2,2) = 1;
+        F_gradients_wrt_x[i] = x.transpose();
+    }
 
     return F;
 }
@@ -185,7 +218,8 @@ Matrix<T, 3, 3> EoLRodSim::computeSecondPiolaStress(Rod* rod, int rod_idx, TV2 c
     return S;
 }
 
-Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV direction, std::vector<TV>& gradients_wrt_thickness, bool diff){
+Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV direction, 
+    std::vector<TV>& gradients_wrt_thickness, std::vector<TV>& gradients_wrt_nodes, bool diff){
 
     TV stress = TV::Zero();
     bool cut = false;
@@ -225,7 +259,7 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
 
                 TV stress_ellipse; 
                 // stress over cross section area
-                stress_ellipse = integrateOverEllipse(rod, i, cos_angle, normal, distance, gradients_wrt_thickness[rod->rod_id], diff);
+                stress_ellipse = integrateOverEllipse(rod, i, cos_angle, normal, distance, gradients_wrt_thickness[rod->rod_id], gradients_wrt_nodes, diff);
                 stress += stress_ellipse;
             }
         }
@@ -236,6 +270,9 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
     for(int i = 0; i < Rods.size(); i++){
         gradients_wrt_thickness[i] /= weight_sum;
     }
+    for(int i = 0; i < W.cols(); i++){
+        gradients_wrt_nodes[i] /= weight_sum;
+    }
     // std::cout << weight_sum << std::endl;
     return stress/weight_sum;
 }
@@ -244,19 +281,27 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
 
     int c = line_directions.size();
     std::vector<MatrixXT> gradient_t(Rods.size(), MatrixXT(3,c));
+    // W.cols() = # node DoF
+    std::vector<MatrixXT> gradient_t_wrt_x(W.cols(), MatrixXT(3,c));
     MatrixXT n(3, c);
     MatrixXT t(3, c);
     for(int i = 0; i < c; ++i){
         TV direction = line_directions.at(i);
         TV direction_normal; direction_normal = direction.cross(TV{0,0,1});
         direction_normal = direction_normal.normalized(); 
+
         std::vector<TV> gradient_t_di(Rods.size(), TV::Zero());
-        t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, true);
-        for(int j = 0; j < 3; ++j){if(std::abs(t.col(i)(j))< 1e-10) t.col(i)(j) = 0;}
+        std::vector<TV> gradient_t_wrt_x_di(W.cols(), TV::Zero());
+
+        t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, gradient_t_wrt_x_di, true);
+        // for(int j = 0; j < 3; ++j){if(std::abs(t.col(i)(j))< 1e-10) t.col(i)(j) = 0;}
         n.col(i) = direction_normal;
-        for(int j = 0; j < 3; ++j){if(std::abs(n.col(i)(j))< 1e-10) n.col(i)(j) = 0;}
+        // for(int j = 0; j < 3; ++j){if(std::abs(n.col(i)(j))< 1e-10) n.col(i)(j) = 0;}
         for(int j = 0; j < gradient_t.size(); ++j){
             gradient_t[j].col(i) = gradient_t_di[j];
+        }
+        for(int j = 0; j < gradient_t_wrt_x.size(); ++j){
+            gradient_t_wrt_x[j].col(i) = gradient_t_wrt_x_di[j];
         }
     }
 
@@ -264,6 +309,7 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
     MatrixXT A = MatrixXT::Zero(3*c,6);
     VectorXT b(3*c);
     std::vector<VectorXT> b_diff(Rods.size(), VectorXT(3*c));
+    std::vector<VectorXT> b_diff_wrt_x(W.cols(), VectorXT(3*c));
     for(int i = 0; i < c; ++i){
         MatrixXT A_block = MatrixXT::Zero(3,6);
         TV normal = n.col(i);
@@ -275,12 +321,20 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
         for(int j = 0; j < Rods.size(); ++j){
             b_diff[j].segment(i*3, 3) = gradient_t[j].col(i);
         }
+        for(int j = 0; j < W.cols(); ++j){
+            b_diff_wrt_x[j].segment(i*3, 3) = gradient_t_wrt_x[j].col(i);
+        }
     }
     VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
     stress_gradients_wrt_rod_thickness = std::vector<TV> (Rods.size(), TV::Zero());
+    stress_gradients_wrt_x = std::vector<TV> (W.cols(), TV::Zero());
     for(int i = 0; i < Rods.size(); i++){
         VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
         stress_gradients_wrt_rod_thickness[i] = {x(0), x(3), 2*x(1)};
+    }
+    for(int i = 0; i < W.cols(); i++){
+        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
+        stress_gradients_wrt_x[i] = {x(0), x(3), 2*x(1)};
     }
     fitted_tensor << x(0), x(1), x(2), 
                     x(1), x(3), x(4),
@@ -290,8 +344,11 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
 }
 
 // Function to integrate over a single ellipse
-Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample, TV& gradient_wrt_thickness, bool diff){
+Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T cos_angle, const TV normal, const T center_line_distance_to_sample, 
+                TV& gradient_wrt_thickness, std::vector<TV>& gradient_wrt_nodes, bool diff){
+
     TV integral = {0.0, 0.0, 0.0};
+    Vector<T, 18> integral_diff_traction; integral_diff_traction.setZero();
     int n = 10; // Discretization points for x
 
     T std = 0.1*unit;
@@ -321,11 +378,22 @@ Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T
         if(diff && i == n) gradient_wrt_thickness += inner_integral(0);
         weights += gaussian_kernel(center_line_distance_to_sample+x);
 
+        Matrix<T, 18, 1> diff_traction = SGradientWrtx(rod, cut_idx) *normal;
+        double kernel = gaussian_kernel(center_line_distance_to_sample+x);
+        integral_diff_traction += kernel * diff_traction;
     }
 
     integral *= 2.0 * b / n;
     weights *= 2.0 * b / n;
+    integral_diff_traction *= 2.0 * b / n;
     // std::cout << "Weights in rod: " << weights << std::endl;
+
+    Offset offset_i = rod->offset_map[rod->indices[cut_idx]];
+    Offset offset_j = rod->offset_map[rod->indices[cut_idx+1]];
+    for(int i = 0; i < 3; ++i){
+        gradient_wrt_nodes[offset_i[i]] = integral_diff_traction.segment<3>(i*3);
+        gradient_wrt_nodes[offset_j[i]] = integral_diff_traction.segment<3>(i*3+9);
+    }
 
     return integral;
 }
