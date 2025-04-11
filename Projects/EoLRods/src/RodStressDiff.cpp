@@ -1,4 +1,5 @@
 #include "../include/EoLRodSim.h"
+#include "../autodiff/EoLRodStretchingEnergy.h"
 
 Matrix<T, 9, 6> dSdx(T YoungsModulus, Vector<T, 6> X, Vector<T, 6> x, Vector<T, 3> N){
 
@@ -86,4 +87,99 @@ Matrix<T, 18, 3> EoLRodSim::SGradientWrtx(Rod* rod, int rod_idx){
     }
 
     return res;
+}
+
+void EoLRodSim::addStretchingForceDiffThickness(std::vector<Entry>& entry_K)
+{
+    
+    for (auto& rod : Rods)
+    {
+        rod->iterateSegmentsWithOffset([&](int node_i, int node_j, Offset offset_i, Offset offset_j, int rod_idx)
+        {
+            // std::cout << "node i " << node_i << " node j " << node_j << std::endl;
+            // std::cout << "node i " << offset_i.transpose() << " node j " << offset_j.transpose() << std::endl;
+            TV xi, xj, Xi, Xj, dXi, dXj;
+            rod->x(node_i, xi); rod->x(node_j, xj);
+            rod->XdX(node_i, Xi, dXi); rod->XdX(node_j, Xj, dXj);
+            
+            std::vector<TV> x(4);
+            x[0] = xi; x[1] = xj; x[2] = Xi; x[3] = Xj;
+
+            Vector<T, 3 * 4> F;
+            F.setZero();
+            computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
+            F = F / rod->ks * 2 * rod->E * M_PI * rod->b;
+            F *= -1.0;
+
+            std::vector<int> nodes = { node_i, node_j };
+
+            std::vector<Offset> offsets = { offset_i, offset_j };
+            
+            for(int k = 0; k < nodes.size(); k++)
+                for (int j = 0; j < 3; j++){
+                    entry_K.emplace_back(offsets[k][j], rod->rod_id, -F(3*k+j));
+                }
+        });
+    }
+}
+
+void EoLRodSim::buildForceGradientWrtThicknessMatrix(StiffnessMatrix& K)
+{
+    std::vector<Entry> entry_K;
+    VectorXT dq_projected = dq;
+    if(!add_penalty && !run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            dq_projected[offset] = target;
+        });
+
+    deformed_states = rest_states + W * dq_projected;
+    for (auto& rod : Rods)
+    {
+        rod->reference_angles = deformed_states.template segment(rod->theta_dof_start_offset, rod->indices.size() - 1);
+    }
+    for (auto& crossing : rod_crossings)
+        crossing->omega = deformed_states.template segment<3>(crossing->dof_offset);
+
+    addStretchingForceDiffThickness(entry_K);
+
+    StiffnessMatrix A(deformed_states.rows(), Rods.size());
+
+    A.setFromTriplets(entry_K.begin(), entry_K.end());
+    // std::cout << A.rows() << " " << A.cols() << std::endl;
+    // std::cout << A << std::endl;
+    K = W.transpose() * A;
+    
+    if(!run_diff_test)
+        iterateDirichletDoF([&](int offset, T target)
+        {
+            K.row(offset) *= 0;
+        });
+
+    // std::cout << K << std::endl;
+    
+    K.makeCompressed();
+}
+
+Eigen::VectorXd EoLRodSim::solveAdjointForOptimization(const VectorXT& dobj_dx)
+{
+    VectorXT ddq(W.cols());
+    ddq.setZero();
+    VectorXT rhs = W.transpose()*dobj_dx;
+
+    StiffnessMatrix K;
+    buildSystemDoFMatrix(K);
+    bool success = linearSolve(K, rhs, ddq);
+    if (!success){
+        std::cout << "Not succeed in adjoint\n";
+        return VectorXT(Rods.size());
+    }
+
+    T norm = ddq.norm();
+    // std::cout << norm << std::endl;
+    StiffnessMatrix fd_thickness;
+    buildForceGradientWrtThicknessMatrix(fd_thickness);
+    VectorXT dxd_thickness = fd_thickness.transpose() * ddq;
+    
+    return dxd_thickness;  
 }

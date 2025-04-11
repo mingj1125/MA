@@ -15,38 +15,38 @@ int main()
     // scene.buildFEMRodScene("../../../Projects/EoLRods/data/irregular_mesh.obj", 0);
     scene.buildFEMRodScene("../../../Projects/EoLRods/data/irregular_mesh_good.obj", 0);
     
-    // App app(sim);
-    // // app.initializeScene("irregular_mesh");
-    // app.initializeScene("irregular_mesh_good");
-    // // app.initializeScene("random_triangle_mesh");
-    // // app.initializeScene("grid");
-    // // app.initializeScene();
-    // app.run();
+    App app(sim);
+    // app.initializeScene("irregular_mesh");
+    app.initializeScene("irregular_mesh_good");
+    // app.initializeScene("random_triangle_mesh");
+    // app.initializeScene("grid");
+    // app.initializeScene();
+    app.run();
 
-    int num_directions = 20;
-    std::vector<Eigen::Vector3d> directions;
-    for(int i = 0; i < num_directions; ++i) {
-        double angle = i*2*M_PI/num_directions; 
-        directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
-    }
-    std::vector<double> rods_radius;
-    std::string mesh_name = "irregular_mesh_good";
-    std::string filename = "../../../Projects/EoLRods/optimization_output/"+mesh_name+"_radii.dat";
-    std::ifstream in_file(filename);
-    if (!in_file) {
-        std::cerr << "Error opening file for reading: " << filename << std::endl;
-    }
-
-    T a;
-    while (in_file >> a) {
-        rods_radius.push_back(a);
-    }
-    scene.rods_radii.resize(rods_radius.size());
-    scene.rods_radii.setConstant(4e-4);
-    // for(int i = 0; i < rods_radius.size(); ++i){
-    //     scene.rods_radii(i) = rods_radius[i];
+    // int num_directions = 20;
+    // std::vector<Eigen::Vector3d> directions;
+    // for(int i = 0; i < num_directions; ++i) {
+    //     double angle = i*2*M_PI/num_directions; 
+    //     directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     // }
-    std::cout << "Found C: \n" << scene.findBestCTensorviaProbing({0.64, 0.36, 0},directions) << std::endl;
+    // std::vector<double> rods_radius;
+    // std::string mesh_name = "irregular_mesh_good";
+    // std::string filename = "../../../Projects/EoLRods/optimization_output/"+mesh_name+"_radii.dat";
+    // std::ifstream in_file(filename);
+    // if (!in_file) {
+    //     std::cerr << "Error opening file for reading: " << filename << std::endl;
+    // }
+
+    // T a;
+    // while (in_file >> a) {
+    //     rods_radius.push_back(a);
+    // }
+    // scene.rods_radii.resize(rods_radius.size());
+    // scene.rods_radii.setConstant(4e-4);
+    // // for(int i = 0; i < rods_radius.size(); ++i){
+    // //     scene.rods_radii(i) = rods_radius[i];
+    // // }
+    // std::cout << "Found C: \n" << scene.findBestCTensorviaProbing({0.64, 0.36, 0},directions, true) << std::endl;
 
     // scene.optimizeForThickness({0.4, 0.53, 0}, {2.3e7, 5e6, 7e5, 2e7, 7e5, 1e7}, "../../../Projects/EoLRods/optimization_output/irregular_mesh_good");
 

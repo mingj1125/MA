@@ -54,7 +54,7 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     
     std::vector<TV> dx;
     std::vector<TV> dX;
-    std::vector<MatrixXT> diff_b_dx(W.cols(), MatrixXT(3, line_directions.size())); // size = # directions
+    std::vector<MatrixXT> diff_b_dx(deformed_states.rows(), MatrixXT(3, line_directions.size())); // size = # directions
     T std = 0.1*unit;
     auto gaussian_kernel = [std](T distance){
         return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI));
@@ -62,7 +62,7 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
 
     int counter_dir = 0;
     for(auto direction : line_directions){
-        std::vector<TV> dx_gradients_wrt_x(W.cols(),TV::Zero());
+        std::vector<TV> dx_gradients_wrt_x(deformed_states.rows(),TV::Zero());
         bool cut = false;
         std::priority_queue<Pair> intersections;
         T weight_sum = 0;
@@ -145,8 +145,8 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     // assume constant thickness of the material 
     if(F(2,2) == 0.) F(2,2) = 1;
 
-    F_gradients_wrt_x = std::vector<TM>(W.cols());
-    for(int i = 0; i < W.cols(); ++i){
+    F_gradients_wrt_x = std::vector<TM>(deformed_states.rows());
+    for(int i = 0; i < deformed_states.rows(); ++i){
         MatrixXT diff_b_i = diff_b_dx[i].transpose();
         TM x = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
         if(x(2,2) == 0.) x(2,2) = 1;
@@ -270,7 +270,7 @@ Vector<T, 3> EoLRodSim::computeWeightedStress(const TV sample_loc, const TV dire
     for(int i = 0; i < Rods.size(); i++){
         gradients_wrt_thickness[i] /= weight_sum;
     }
-    for(int i = 0; i < W.cols(); i++){
+    for(int i = 0; i < deformed_states.rows(); i++){
         gradients_wrt_nodes[i] /= weight_sum;
     }
     // std::cout << weight_sum << std::endl;
@@ -282,7 +282,7 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
     int c = line_directions.size();
     std::vector<MatrixXT> gradient_t(Rods.size(), MatrixXT(3,c));
     // W.cols() = # node DoF
-    std::vector<MatrixXT> gradient_t_wrt_x(W.cols(), MatrixXT(3,c));
+    std::vector<MatrixXT> gradient_t_wrt_x(deformed_states.rows(), MatrixXT(3,c));
     MatrixXT n(3, c);
     MatrixXT t(3, c);
     for(int i = 0; i < c; ++i){
@@ -291,7 +291,7 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
         direction_normal = direction_normal.normalized(); 
 
         std::vector<TV> gradient_t_di(Rods.size(), TV::Zero());
-        std::vector<TV> gradient_t_wrt_x_di(W.cols(), TV::Zero());
+        std::vector<TV> gradient_t_wrt_x_di(deformed_states.rows(), TV::Zero());
 
         t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, gradient_t_wrt_x_di, true);
         // for(int j = 0; j < 3; ++j){if(std::abs(t.col(i)(j))< 1e-10) t.col(i)(j) = 0;}
@@ -309,7 +309,7 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
     MatrixXT A = MatrixXT::Zero(3*c,6);
     VectorXT b(3*c);
     std::vector<VectorXT> b_diff(Rods.size(), VectorXT(3*c));
-    std::vector<VectorXT> b_diff_wrt_x(W.cols(), VectorXT(3*c));
+    std::vector<VectorXT> b_diff_wrt_x(deformed_states.rows(), VectorXT(3*c));
     for(int i = 0; i < c; ++i){
         MatrixXT A_block = MatrixXT::Zero(3,6);
         TV normal = n.col(i);
@@ -321,18 +321,18 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
         for(int j = 0; j < Rods.size(); ++j){
             b_diff[j].segment(i*3, 3) = gradient_t[j].col(i);
         }
-        for(int j = 0; j < W.cols(); ++j){
+        for(int j = 0; j < deformed_states.rows(); ++j){
             b_diff_wrt_x[j].segment(i*3, 3) = gradient_t_wrt_x[j].col(i);
         }
     }
     VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
     stress_gradients_wrt_rod_thickness = std::vector<TV> (Rods.size(), TV::Zero());
-    stress_gradients_wrt_x = std::vector<TV> (W.cols(), TV::Zero());
+    stress_gradients_wrt_x = std::vector<TV> (deformed_states.rows(), TV::Zero());
     for(int i = 0; i < Rods.size(); i++){
         VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
         stress_gradients_wrt_rod_thickness[i] = {x(0), x(3), 2*x(1)};
     }
-    for(int i = 0; i < W.cols(); i++){
+    for(int i = 0; i < deformed_states.rows(); i++){
         VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
         stress_gradients_wrt_x[i] = {x(0), x(3), 2*x(1)};
     }

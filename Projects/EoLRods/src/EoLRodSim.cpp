@@ -832,8 +832,8 @@ bool EoLRodSim::advanceOneStep(int step)
         // std::cout << "Window approximation: \n" << computeWindowHomogenization((top_right+bottom_left)/2+(top_right-bottom_left)*0.05, (top_right+bottom_left)/2-(top_right-bottom_left)*0.05) << std::endl;
 
         // std::cout << "E approximation: \n" << 0.5*(F.transpose()*F-TM::Identity())<< std::endl;
-        std::cout << "Boundary stress: " << computeBoundaryStress().transpose() << std::endl;
-        std::cout << "Vertical boundary stress: " << computeVerticalBoundaryStress().transpose() << std::endl;
+        // std::cout << "Boundary stress: " << computeBoundaryStress().transpose() << std::endl;
+        // std::cout << "Vertical boundary stress: " << computeVerticalBoundaryStress().transpose() << std::endl;
         // std::cout << "Approximated F: \n" << computeWeightedDeformationGradient(sample_location, directions) << std::endl;
         return true;
     }

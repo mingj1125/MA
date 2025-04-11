@@ -14,8 +14,8 @@ Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vecto
     Eigen::MatrixXd n(3, c);
     Eigen::MatrixXd t(3, c);
     std::vector<Eigen::MatrixXd> t_diff(sim.Rods.size(), Eigen::MatrixXd(3,c));
-    std::vector<Eigen::MatrixXd> n_diff_x(sim.W.cols(), Eigen::MatrixXd(3,c));
-    std::vector<Eigen::MatrixXd> t_diff_x(sim.W.cols(), Eigen::MatrixXd(3,c));
+    std::vector<Eigen::MatrixXd> n_diff_x(sim.deformed_states.rows(), Eigen::MatrixXd(3,c));
+    std::vector<Eigen::MatrixXd> t_diff_x(sim.deformed_states.rows(), Eigen::MatrixXd(3,c));
     for(int i = 1; i <= num_test; ++i){
         EoLRodSim sim1;
         sim = sim1;
@@ -206,13 +206,13 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
 
-    double step = 5e-5;
-    double tol = 0.1;
+    double step = 1e-4;
+    double tol = 0.01;
     double minVal = 0.0001;
     rods_radii.resize(sim.Rods.size());
-    rods_radii.setConstant(3e-4);
+    rods_radii.setConstant(4e-4);
     Matrix<T, 3, 3> C_current;
-    for(int iter = 0; iter < 260; ++iter){
+    for(int iter = 0; iter < 1000; ++iter){
         C_current = findBestCTensorviaProbing(target_location, directions, true);
         VectorXT gradient_wrt_thickness(sim.Rods.size());
         T scale = 1;
@@ -224,7 +224,7 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
             while(abs(g)*scale > 0.1) scale /= 10;
             gradient_wrt_thickness(i) = g;
         }
-        VectorXT gradient_wrt_x(sim.W.cols().size());
+        VectorXT gradient_wrt_x(sim.deformed_states.rows());
         for(int i = 0; i < gradient_wrt_x.size(); ++i){
             T g = 0;
             for(int j = 0; j < 6; ++j){
@@ -232,13 +232,16 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
             }
             gradient_wrt_x(i) = g;
         }
+        VectorXT total_gradient_wrt_thickness(sim.Rods.size());
+        total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
+        // std::cout << total_gradient_wrt_thickness.transpose();
 
-        if(((C_entry - stiffness_tensor).lpNorm<Eigen::Infinity>())/abs(stiffness_tensor.minCoeff()) < tol || gradient_wrt_thickness.norm()*scale < tol) {
+        if(((C_entry - stiffness_tensor).lpNorm<Eigen::Infinity>())/abs(stiffness_tensor.minCoeff()) < tol || total_gradient_wrt_thickness.norm() < tol) {
             C_current = findBestCTensorviaProbing(target_location, directions, true);
             std::cout << "Found solution at step: " << iter << std::endl; 
             break;
         }
-        rods_radii -= step * scale * gradient_wrt_thickness;
+        rods_radii -= step * scale * total_gradient_wrt_thickness;
         rods_radii = rods_radii.cwiseMax(minVal);
     }
     
@@ -279,6 +282,7 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
     std::vector<Matrix<T, 3, 3>> C_current(target_locations.size());
     for(int iter = 0; iter < 760; ++iter){
         VectorXT gradient_wrt_thickness(sim.Rods.size()); gradient_wrt_thickness.setZero();
+        VectorXT gradient_wrt_x(sim.deformed_states.rows()); gradient_wrt_x.setZero();
         T scale = 1;
         for(int k = 0; k < target_locations.size(); ++k){
             TV target_location = target_locations[k];
@@ -292,8 +296,19 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
                 while(abs(g)*scale > 0.1) scale /= 10;
                 gradient_wrt_thickness(i) += g;
             }
+            for(int i = 0; i < gradient_wrt_x.size(); ++i){
+                T g = 0;
+                for(int j = 0; j < 6; ++j){
+                    g += 2*(C_entry(j) - target_C(j))/abs(target_C(j))*C_diff_x[i](j);
+                }
+                gradient_wrt_x(i) += g;
+            }
         }
-        if(gradient_wrt_thickness.norm()*scale*10 < tol) {
+        VectorXT total_gradient_wrt_thickness(sim.Rods.size());
+        total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
+        // std::cout << total_gradient_wrt_thickness.transpose();
+
+        if(total_gradient_wrt_thickness.norm()*scale*10 < tol) {
             for(int i = 0; i < target_locations.size(); ++i){
                 TV target_location = target_locations[i];
                 C_current[i] = findBestCTensorviaProbing(target_location, directions, true);
@@ -301,7 +316,7 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
             std::cout << "Found solution at step: " << iter << std::endl; 
             break;
         }
-        rods_radii -= step * scale * gradient_wrt_thickness;
+        rods_radii -= step * scale * total_gradient_wrt_thickness;
         rods_radii = rods_radii.cwiseMax(minVal);
     }
 
