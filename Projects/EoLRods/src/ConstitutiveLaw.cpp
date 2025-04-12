@@ -146,10 +146,6 @@ Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vecto
  
     }
 
-    // for(int i = 0; i < c; ++i){
-    //     std::cout << "Stress in strain: " << n.col(i).transpose() << " is : \n" << t.col(i).transpose() << std::endl;
-    // }
-
     Matrix<T, 3, 3> fitted_tensor; fitted_tensor.setZero();
     Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3*c,6);
     VectorXT b(3*c);
@@ -199,20 +195,21 @@ Matrix<T, 3, 3> Scene::findBestCTensorviaProbing(TV sample_loc, const std::vecto
 }
 
 void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename){
-    int num_directions = 8;
+    int num_directions = 20;
     std::vector<Eigen::Vector3d> directions;
     for(int i = 0; i < num_directions; ++i) {
         double angle = i*2*M_PI/num_directions; 
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
 
-    double step = 1e-4;
+    double step = 1e-2;
     double tol = 0.01;
     double minVal = 0.0001;
+    int ls_max = 10;
     rods_radii.resize(sim.Rods.size());
-    rods_radii.setConstant(4e-4);
+    rods_radii.setConstant(4e-2);
     Matrix<T, 3, 3> C_current;
-    for(int iter = 0; iter < 1000; ++iter){
+    for(int iter = 0; iter < 240; ++iter){
         C_current = findBestCTensorviaProbing(target_location, directions, true);
         VectorXT gradient_wrt_thickness(sim.Rods.size());
         T scale = 1;
@@ -221,7 +218,7 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
             for(int j = 0; j < 6; ++j){
                 g += 2*(C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*C_diff_thickness[i](j);
             }
-            while(abs(g)*scale > 0.1) scale /= 10;
+            while(abs(g)*scale > 5) scale /= 10;
             gradient_wrt_thickness(i) = g;
         }
         VectorXT gradient_wrt_x(sim.deformed_states.rows());
@@ -235,13 +232,35 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
         VectorXT total_gradient_wrt_thickness(sim.Rods.size());
         total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
         // std::cout << total_gradient_wrt_thickness.transpose();
+        
+        T E0 = 0;
+        for(int j = 0; j < 6; ++j){
+            E0 += (C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+        }
+        int cnt = 0;
+        VectorXT rods_radii_current = rods_radii;
+        while(true)
+        {
+            rods_radii = rods_radii_current - step * scale * total_gradient_wrt_thickness;
+            T E1 = 0;
+            C_current = findBestCTensorviaProbing(target_location, directions, true);
+            for(int j = 0; j < 6; ++j){
+                E1 += (C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+            }
+            if (E1 - E0 < 0) 
+                break;
+            scale *= T(0.5);
+            cnt += 1;
+            if (cnt > ls_max)
+                break;
+        }
 
         if(((C_entry - stiffness_tensor).lpNorm<Eigen::Infinity>())/abs(stiffness_tensor.minCoeff()) < tol || total_gradient_wrt_thickness.norm() < tol) {
             C_current = findBestCTensorviaProbing(target_location, directions, true);
             std::cout << "Found solution at step: " << iter << std::endl; 
             break;
         }
-        rods_radii -= step * scale * total_gradient_wrt_thickness;
+        // rods_radii -= step * scale * total_gradient_wrt_thickness;
         rods_radii = rods_radii.cwiseMax(minVal);
     }
     
@@ -261,7 +280,6 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
     // out.close();
     std::cout << "Optimized C: \n" << C_current << std::endl;
     
-    
 }
 
 void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename){
@@ -274,20 +292,25 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
 
-    double step = 7e-5;
+    double step = 5e-2;
     double tol = 0.01;
+    int ls_max = 10;
     double minVal = 0.0001;
     rods_radii.resize(sim.Rods.size());
-    rods_radii.setConstant(4e-4);
+    rods_radii.setConstant(4e-2);
     std::vector<Matrix<T, 3, 3>> C_current(target_locations.size());
-    for(int iter = 0; iter < 760; ++iter){
+    for(int iter = 0; iter < 750; ++iter){
         VectorXT gradient_wrt_thickness(sim.Rods.size()); gradient_wrt_thickness.setZero();
         VectorXT gradient_wrt_x(sim.deformed_states.rows()); gradient_wrt_x.setZero();
         T scale = 1;
+        T E0 = 0;
         for(int k = 0; k < target_locations.size(); ++k){
             TV target_location = target_locations[k];
             Vector<T, 6> target_C = stiffness_tensors[k];
             C_current[k] = findBestCTensorviaProbing(target_location, directions, true);
+            for(int j = 0; j < 6; ++j){
+                E0 += (C_entry(j) - target_C(j))/abs(target_C(j))*(C_entry(j) - target_C(j));
+            }
             for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
                 T g = 0;
                 for(int j = 0; j < 6; ++j){
@@ -306,9 +329,32 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
         }
         VectorXT total_gradient_wrt_thickness(sim.Rods.size());
         total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
-        // std::cout << total_gradient_wrt_thickness.transpose();
+       
+        int cnt = 0;
+        VectorXT rods_radii_current = rods_radii;
+        while(true)
+        {
+            rods_radii = rods_radii_current - step * scale * total_gradient_wrt_thickness;
+            rods_radii = rods_radii.cwiseMax(minVal);
+            T E1 = 0;
+            for(int k = 0; k < target_locations.size(); ++k){
+                TV target_location = target_locations[k];
+                Vector<T, 6> target_C = stiffness_tensors[k];
+                C_current[k] = findBestCTensorviaProbing(target_location, directions, true);
+                for(int j = 0; j < 6; ++j){
+                    E1 += (C_entry(j) - target_C(j))/abs(target_C(j))*(C_entry(j) - target_C(j));
+                }
+            }    
+            if (E1 - E0 < 0) 
+                break;
+            scale *= T(0.5);
+            cnt += 1;
+            if (cnt > ls_max)
+                break;
+        }
 
-        if(total_gradient_wrt_thickness.norm()*scale*10 < tol) {
+        // std::cout << total_gradient_wrt_thickness.transpose();
+        if(total_gradient_wrt_thickness.norm() < tol || E0/12 < tol) {
             for(int i = 0; i < target_locations.size(); ++i){
                 TV target_location = target_locations[i];
                 C_current[i] = findBestCTensorviaProbing(target_location, directions, true);
@@ -316,8 +362,8 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
             std::cout << "Found solution at step: " << iter << std::endl; 
             break;
         }
-        rods_radii -= step * scale * total_gradient_wrt_thickness;
-        rods_radii = rods_radii.cwiseMax(minVal);
+        // rods_radii -= step * scale * total_gradient_wrt_thickness;
+        // rods_radii = rods_radii.cwiseMax(minVal);
     }
 
     std::ofstream out(filename+"_C.dat");
@@ -337,4 +383,64 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
     }
     out_file << rods_radii << "\n";
     out_file.close();
+}
+
+void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffness_tensor){
+    int num_directions = 20;
+    std::vector<Eigen::Vector3d> directions;
+    for(int i = 0; i < num_directions; ++i) {
+        double angle = i*2*M_PI/num_directions; 
+        directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
+    }
+    rods_radii.resize(sim.Rods.size());
+    rods_radii.setConstant(4e-2);
+    Matrix<T, 3, 3> C_current = findBestCTensorviaProbing(target_location, directions, true);
+    VectorXT gradient_wrt_thickness(sim.Rods.size());
+    for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
+        T g = 0;
+        for(int j = 0; j < 6; ++j){
+            g += 2*(C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*C_diff_thickness[i](j);
+        }
+        gradient_wrt_thickness(i) = g;
+    }
+    VectorXT gradient_wrt_x(sim.deformed_states.rows());
+    for(int i = 0; i < gradient_wrt_x.size(); ++i){
+        T g = 0;
+        for(int j = 0; j < 6; ++j){
+            g += 2*(C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*C_diff_x[i](j);
+        }
+        gradient_wrt_x(i) = g;
+    }
+    VectorXT total_gradient_wrt_thickness(sim.Rods.size());
+    total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
+
+    T delta_r = 1e-8;
+    VectorXT total_finite_difference_wrt_thickness(sim.Rods.size()); total_finite_difference_wrt_thickness.setZero();
+    T obj_init = 0;
+    for(int j = 0; j < 6; ++j){
+        obj_init += (C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+    }
+    for(int i = 0; i < 6; ++i){
+        rods_radii.setConstant(4e-2);
+        rods_radii(i) = rods_radii(i) + delta_r;
+        C_current = findBestCTensorviaProbing(target_location, directions, true);
+        T obj = 0;
+        for(int j = 0; j < 6; ++j){
+            obj += (C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+        }
+        rods_radii.setConstant(4e-2);
+        rods_radii(i) = rods_radii(i) - delta_r;
+        C_current = findBestCTensorviaProbing(target_location, directions, true);
+        T obj_minus = 0;
+        for(int j = 0; j < 6; ++j){
+            obj_minus += (C_entry(j) - stiffness_tensor(j))/abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+        }
+        total_finite_difference_wrt_thickness(i) = (obj-obj_minus)/2/delta_r;
+        std::cout << "C : \n" << C_current << std::endl;
+    }
+    std::cout << ((total_finite_difference_wrt_thickness - total_gradient_wrt_thickness).head(60)).norm()/total_gradient_wrt_thickness.norm() << std::endl;
+    std::cout << "FDM: \n";
+    std::cout << total_finite_difference_wrt_thickness.transpose() << std::endl;
+    std::cout << "Gradient: \n";
+    std::cout << total_gradient_wrt_thickness.transpose() << std::endl;
 }

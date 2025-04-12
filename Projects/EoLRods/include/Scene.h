@@ -50,6 +50,7 @@ public:
     Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt = false);
     void optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename);
     void optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename);
+    void finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffness_tensor);
 
 private:
 

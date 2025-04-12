@@ -108,7 +108,7 @@ void EoLRodSim::addStretchingForceDiffThickness(std::vector<Entry>& entry_K)
             Vector<T, 3 * 4> F;
             F.setZero();
             computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
-            F = F / rod->ks * 2 * rod->E * M_PI * rod->b;
+            F = F * 2 / rod->b;
             F *= -1.0;
 
             std::vector<int> nodes = { node_i, node_j };

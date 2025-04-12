@@ -113,7 +113,7 @@ public:
     int final_3;
 
     T dt = 1;
-    T newton_tol = 2e-4;
+    T newton_tol = 1e-4;
     T E = 3.5e9; //PLA
     T R = 0.0002;
 

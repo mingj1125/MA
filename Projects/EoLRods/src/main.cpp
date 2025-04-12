@@ -42,22 +42,22 @@ int main()
     //     rods_radius.push_back(a);
     // }
     // scene.rods_radii.resize(rods_radius.size());
-    // scene.rods_radii.setConstant(4e-4);
+    // scene.rods_radii.setConstant(4e-2);
     // // for(int i = 0; i < rods_radius.size(); ++i){
     // //     scene.rods_radii(i) = rods_radius[i];
     // // }
-    // std::cout << "Found C: \n" << scene.findBestCTensorviaProbing({0.64, 0.36, 0},directions, true) << std::endl;
+    // std::cout << "Found C: \n" << scene.findBestCTensorviaProbing({0.4, 0.53, 0},directions, true) << std::endl;
 
-    // scene.optimizeForThickness({0.4, 0.53, 0}, {2.3e7, 5e6, 7e5, 2e7, 7e5, 1e7}, "../../../Projects/EoLRods/optimization_output/irregular_mesh_good");
+    // scene.optimizeForThickness({0.4, 0.53, 0}, {2.3e9, 5e8, 7e7, 2e9, 7e7, 1e9}, "../../../Projects/EoLRods/optimization_output/irregular_mesh_good");
 
     // std::vector<Vector<T, 3>> locations;
     // locations.push_back({0.64, 0.36, 0});
     // locations.push_back({0.4, 0.53, 0});
-    // // locations.push_back({0.64, 0.36, 0});
     // std::vector<Vector<T, 6>> Cs;
-    // Cs.push_back({2e7, 5e6, -2e6, 2e7, -7e5, 1e7});
-    // Cs.push_back({2.1e7, 5.5e6, 2e5, 2e7, 1e6, 1e7});
-    // // Cs.push_back({2e7, 5e6, -2e6, 2e7, -7e5, 1e7});
+    // Cs.push_back({2e9, 5e8, -2e8, 2e9, -7e7, 1e9});
+    // Cs.push_back({2.1e9, 5.5e8, 2e7, 2e9, 1e8, 1e9});
     // scene.optimizeForThicknessDistribution(locations, Cs, "../../../Projects/EoLRods/optimization_output/irregular_mesh_good");
+
+    // scene.finiteDifferenceEstimation({0.4,  0.53, 0}, {2.3e7, 5e6, 7e5, 2e7, 7e5, 1e7});
     return 0;
 }

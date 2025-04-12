@@ -148,9 +148,9 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     F_gradients_wrt_x = std::vector<TM>(deformed_states.rows());
     for(int i = 0; i < deformed_states.rows(); ++i){
         MatrixXT diff_b_i = diff_b_dx[i].transpose();
-        TM x = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
-        if(x(2,2) == 0.) x(2,2) = 1;
-        F_gradients_wrt_x[i] = x.transpose();
+        TM x_i = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
+        if(x_i(2,2) == 0.) x_i(2,2) = 1;
+        F_gradients_wrt_x[i] = x_i.transpose();
     }
 
     return F;
@@ -281,7 +281,7 @@ Matrix<T, 3, 3> EoLRodSim::findBestStressTensorviaProbing(const TV sample_loc, c
 
     int c = line_directions.size();
     std::vector<MatrixXT> gradient_t(Rods.size(), MatrixXT(3,c));
-    // W.cols() = # node DoF
+    // deformed_states.rows() = # node DoF
     std::vector<MatrixXT> gradient_t_wrt_x(deformed_states.rows(), MatrixXT(3,c));
     MatrixXT n(3, c);
     MatrixXT t(3, c);
