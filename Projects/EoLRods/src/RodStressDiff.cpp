@@ -172,7 +172,7 @@ Eigen::VectorXd EoLRodSim::solveAdjointForOptimization(const VectorXT& dobj_dx)
     bool success = linearSolve(K, rhs, ddq);
     if (!success){
         std::cout << "Not succeed in adjoint\n";
-        return VectorXT(Rods.size());
+        return VectorXT::Zero(Rods.size());
     }
 
     T norm = ddq.norm();

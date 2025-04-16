@@ -15,13 +15,13 @@ int main()
     // scene.buildFEMRodScene("../../../Projects/EoLRods/data/irregular_mesh.obj", 0);
     scene.buildFEMRodScene("../../../Projects/EoLRods/data/irregular_mesh_good.obj", 0);
     
-    App app(sim);
-    // app.initializeScene("irregular_mesh");
-    app.initializeScene("irregular_mesh_good");
-    // app.initializeScene("random_triangle_mesh");
-    // app.initializeScene("grid");
-    // app.initializeScene();
-    app.run();
+    // App app(sim);
+    // // app.initializeScene("irregular_mesh");
+    // app.initializeScene("irregular_mesh_good");
+    // // app.initializeScene("random_triangle_mesh");
+    // // app.initializeScene("grid");
+    // // app.initializeScene();
+    // app.run();
 
     // int num_directions = 20;
     // std::vector<Eigen::Vector3d> directions;
@@ -42,7 +42,7 @@ int main()
     //     rods_radius.push_back(a);
     // }
     // scene.rods_radii.resize(rods_radius.size());
-    // scene.rods_radii.setConstant(4e-2);
+    // scene.rods_radii.setConstant(1e-2);
     // // for(int i = 0; i < rods_radius.size(); ++i){
     // //     scene.rods_radii(i) = rods_radius[i];
     // // }
@@ -54,10 +54,10 @@ int main()
     // locations.push_back({0.64, 0.36, 0});
     // locations.push_back({0.4, 0.53, 0});
     // std::vector<Vector<T, 6>> Cs;
-    // Cs.push_back({2e9, 5e8, -2e8, 2e9, -7e7, 1e9});
-    // Cs.push_back({2.1e9, 5.5e8, 2e7, 2e9, 1e8, 1e9});
+    // Cs.push_back({3e5, 8e4, -5e4, 3e5, -1e4, 1.5e5});
+    // Cs.push_back({3.1e5, 8e4, 1.5e4, 4e5, 4e4, 2e5});
     // scene.optimizeForThicknessDistribution(locations, Cs, "../../../Projects/EoLRods/optimization_output/irregular_mesh_good");
 
-    // scene.finiteDifferenceEstimation({0.4,  0.53, 0}, {2.3e7, 5e6, 7e5, 2e7, 7e5, 1e7});
+    scene.finiteDifferenceEstimation({0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
     return 0;
 }

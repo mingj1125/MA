@@ -114,7 +114,7 @@ public:
 
     T dt = 1;
     T newton_tol = 1e-4;
-    T E = 3.5e9; //PLA
+    T E = 3.5e6; //PLA
     T R = 0.0002;
 
     T unit = 0.03;
@@ -228,7 +228,7 @@ public:
         fix_lagrangian.template segment<2>(3).setZero();
         fix_eulerian.template segment<3>(0).setZero();
 
-        config();
+        // config();
     }
     ~EoLRodSim() {}
 

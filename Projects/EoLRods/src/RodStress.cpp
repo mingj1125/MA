@@ -374,18 +374,23 @@ Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T
         };
 
         integral += inner_integral(0);
-        if(diff && i == 0) gradient_wrt_thickness += inner_integral(0);
-        if(diff && i == n) gradient_wrt_thickness += inner_integral(0);
+        // if(diff && i == 0) gradient_wrt_thickness += inner_integral(0);
+        // if(diff && i == n) gradient_wrt_thickness += inner_integral(0);
+        if(diff) gradient_wrt_thickness += inner_integral(0)*(-(center_line_distance_to_sample+x))/std/std*x/b;
         weights += gaussian_kernel(center_line_distance_to_sample+x);
 
-        Matrix<T, 18, 1> diff_traction = SGradientWrtx(rod, cut_idx) *normal;
-        double kernel = gaussian_kernel(center_line_distance_to_sample+x);
-        integral_diff_traction += kernel * diff_traction;
+        if(diff){
+            Matrix<T, 18, 1> diff_traction = SGradientWrtx(rod, cut_idx) *normal;
+            double kernel = gaussian_kernel(center_line_distance_to_sample+x);
+            integral_diff_traction += kernel * diff_traction;
+        }
     }
 
     integral *= 2.0 * b / n;
     weights *= 2.0 * b / n;
     integral_diff_traction *= 2.0 * b / n;
+    gradient_wrt_thickness *= 2.0 * b / n;
+    gradient_wrt_thickness += integral/b;
     // std::cout << "Weights in rod: " << weights << std::endl;
 
     Offset offset_i = rod->offset_map[rod->indices[cut_idx]];

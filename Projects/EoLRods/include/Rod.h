@@ -73,7 +73,7 @@ public:
     // unit m
     T a = 1e-4, b = 1e-4;
 
-    T E = 3.5e9;
+    T E = 3.5e6;
     T poisson_ratio = 0;
     // T E = 1e5;
     T ks;
