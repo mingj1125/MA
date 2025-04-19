@@ -26,10 +26,10 @@ private:
     VectorXT& deformed_states = sim.deformed_states;
     double ROD_A = 3e-4;
     double ROD_B = 3e-4;
+
     std::vector<VectorXT> C_diff_thickness;
     std::vector<VectorXT> C_diff_x;
     VectorXT C_entry;
-    // VectorXT rods_radii; // assume circular cross-section
     
 public:
     Scene(EoLRodSim& eol_sim) : sim(eol_sim) {}
@@ -47,7 +47,17 @@ public:
 
     // ------------------------------- Scene Property -------------------------------
     VectorXT rods_radii; // assume circular cross-section
+    struct C_info{
+
+        std::vector<VectorXT> C_diff_thickness;
+        std::vector<VectorXT> C_diff_x;
+        VectorXT C_entry;
+    
+    };
+    std::vector<C_info> sample_Cs_info; 
+
     Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt = false);
+    void findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::vector<TV> line_directions, bool opt = false);
     void optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename);
     void optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename);
     void finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffness_tensor);

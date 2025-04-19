@@ -2044,7 +2044,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
 
     // TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
     // TV shear_x_left = TV(-0.1, 0.0, 0) * sim.unit;
-    TV shear_x_right = TV(0.0, 0.01, 0.0) * sim.unit;
+    TV shear_x_right = TV(0.1, 0.0, 0.0) * sim.unit;
     TV shear_x_left = TV(0.0, 0.0, 0) * sim.unit;
 
 
@@ -2081,11 +2081,6 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
         return false;
     };
 
-    if (!bc_data)
-    {
-        sim.fixRegionalDisplacement(rec2);
-        sim.fixRegionalDisplacement(rec1);
-    }
     TV shear_x_down = TV(0.0, -0.1, 0.0) * sim.unit;
     TV shear_x_up = TV(0.0, 0.1, 0) * sim.unit;
     auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
@@ -2110,6 +2105,11 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
             return true;
         return false;
     };
+    if (!bc_data)
+    {
+        sim.fixRegionalDisplacement(rec3);
+        sim.fixRegionalDisplacement(rec4);
+    }
     // sim.fixRegionalDisplacement(rec3);
     // sim.fixRegionalDisplacement(rec4);
 

@@ -1,0 +1,45 @@
+Optimization location: -0.76  0.76     0
+Optimization target C (DoF): 
+400000 200000   -150 400000   -150 350000
+Optimization result C: 
+ 400051  199272 93270.8  400023 97477.3  350367
+Optimization location: -0.5 0.76    0
+Optimization target C (DoF): 
+400000 200000   -150 400000   -150 350000
+Optimization result C: 
+  400181   197986 -93900.4   399944 -79809.7   351200
+Optimization location: -0.24  0.76     0
+Optimization target C (DoF): 
+400000 200000   -150 400000   -150 350000
+Optimization result C: 
+  400043   199119   -94136   400030 -99869.6   350447
+Optimization location: -0.76   0.5     0
+Optimization target C (DoF): 
+600000 250000   -150 600000   -150 500000
+Optimization result C: 
+ 600073  250128 6703.35  600033 6131.29  500225
+Optimization location: -0.5  0.5    0
+Optimization target C (DoF): 
+600000 250000   -150 600000   -150 500000
+Optimization result C: 
+  599956   249777 -3927.73   599995 -3042.74   500082
+Optimization location: -0.24   0.5     0
+Optimization target C (DoF): 
+600000 250000   -150 600000   -150 500000
+Optimization result C: 
+  600028   249168  -4881.7   600105 -4050.06   501132
+Optimization location: -0.76  0.24     0
+Optimization target C (DoF): 
+660000 280000   -150 660000   -150 560000
+Optimization result C: 
+  656115   277771 -59854.6   658514 -51838.4   539766
+Optimization location: -0.5 0.24    0
+Optimization target C (DoF): 
+660000 280000   -150 660000   -150 560000
+Optimization result C: 
+ 660320  280234 5994.99  659608 3277.33  564894
+Optimization location: -0.24  0.24     0
+Optimization target C (DoF): 
+660000 280000   -150 660000   -150 560000
+Optimization result C: 
+ 655990  278976 58574.3  658099   51902  539164

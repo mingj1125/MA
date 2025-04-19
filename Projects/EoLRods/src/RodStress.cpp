@@ -55,7 +55,7 @@ Matrix<T, 3, 3> EoLRodSim::computeWeightedDeformationGradient(const TV sample_lo
     std::vector<TV> dx;
     std::vector<TV> dX;
     std::vector<MatrixXT> diff_b_dx(deformed_states.rows(), MatrixXT(3, line_directions.size())); // size = # directions
-    T std = 0.1*unit;
+    T std = 0.08*unit;
     auto gaussian_kernel = [std](T distance){
         return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI));
     };
@@ -351,7 +351,7 @@ Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T
     Vector<T, 18> integral_diff_traction; integral_diff_traction.setZero();
     int n = 10; // Discretization points for x
 
-    T std = 0.1*unit;
+    T std = 0.08*unit;
     auto gaussian_kernel = [std](T distance){
         return std::exp(-0.5*distance*distance/(std*std)) / (std * std::sqrt(2 * M_PI)); /// width;
     };
@@ -404,7 +404,7 @@ Vector<T,3> EoLRodSim::integrateOverEllipse(Rod* rod, const int cut_idx, const T
 }
 
 T EoLRodSim::integrateKernelOverDomain(const TV sample_loc, const TV line_direction){
-    T std = 0.1*unit;
+    T std = 0.08*unit;
     TV bottom_left, top_right;
     computeUndeformedBoundingBox(bottom_left, top_right);
     std::vector<double> intersections(4);
