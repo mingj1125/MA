@@ -1,6 +1,10 @@
 #include "../include/EoLRodSim.h"
 #include "../include/Scene.h"
 #include "../include/App.h"
+#include "../include/OptimizationProblem.h"
+#include "../include/ObjectiveEnergy.h"
+#include <memory>
+
 int main()
 {
     EoLRodSim sim;
@@ -36,10 +40,10 @@ int main()
     //     rods_radius.push_back(a);
     // }
     // scene.rods_radii.resize(rods_radius.size());
-    // scene.rods_radii.setConstant(6.3e-3);
-    // // for(int i = 0; i < rods_radius.size(); ++i){
-    // //     scene.rods_radii(i) = rods_radius[i];
-    // // }
+    // scene.rods_radii.setConstant(1e-2);
+    // for(int i = 0; i < rods_radius.size(); ++i){
+    //     scene.rods_radii(i) = rods_radius[i];
+    // }
     std::vector<Vector<T, 3>> locations;
     
     // irregular
@@ -50,12 +54,12 @@ int main()
     locations.push_back({-0.76, 0.76, 0});
     locations.push_back({-0.50, 0.76, 0});
     locations.push_back({-0.24, 0.76, 0});
-    locations.push_back({-0.76, 0.50, 0});
-    locations.push_back({-0.50, 0.50, 0});
-    locations.push_back({-0.24, 0.50, 0});
-    locations.push_back({-0.76, 0.24, 0});
-    locations.push_back({-0.50, 0.24, 0});
-    locations.push_back({-0.24, 0.24, 0});
+    // locations.push_back({-0.76, 0.50, 0});
+    // locations.push_back({-0.50, 0.50, 0});
+    // locations.push_back({-0.24, 0.50, 0});
+    // locations.push_back({-0.76, 0.24, 0});
+    // locations.push_back({-0.50, 0.24, 0});
+    // locations.push_back({-0.24, 0.24, 0});
 
     // 2 points double refined 
     // locations.push_back({-0.6, 0.56, 0});
@@ -67,19 +71,27 @@ int main()
 
     std::vector<Vector<T, 6>> Cs;
 
-    // Cs.push_back({3e5, 8e4, -5e4, 3e5, -1e4, 1.5e5});
-    // Cs.push_back({3.1e5, 8e4, 1.5e4, 4e5, 4e4, 2e5});
+    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
+    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
+    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
 
     // graded h
-    // Cs.push_back({400000,  100000, -1,  400000,  -1,  350000});
-    // Cs.push_back({400000,  100000, -1,  400000,  -1,  350000});
-    // Cs.push_back({400000,  100000, -1,  400000,  -1,  350000});
-    // Cs.push_back({600000,  250000, -1,  600000,  -1,  500000});
-    // Cs.push_back({600000,  250000, -1,  600000,  -1,  500000});
-    // Cs.push_back({600000,  250000, -1,  600000,  -1,  500000});
-    // Cs.push_back({660000,  550000, -1,  660000,  -1,  540000});
-    // Cs.push_back({660000,  550000, -1,  660000,  -1,  540000});
-    // Cs.push_back({660000,  550000, -1,  660000,  -1,  540000});
+    // Cs.push_back({275898,  114118, -98.0969,   275898, -98.4388,   227295});
+    // Cs.push_back({283301,  118896,  1982.7,    274087,   975.949,  237808});
+    // Cs.push_back({275897,  114117, 105.013,  275897, 105.013,  227290});
+    // Cs.push_back({591502,  253556, 1145.79,  608181, 1912.53,  507416});
+    // Cs.push_back({599134,   257014, -1702.38,   598291, -808.859,   5137930});
+    // Cs.push_back({591685,   253869, -833.522,   607971,  -1903.6,   505923});
+    // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
+
+    // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
+    // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
+    // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
+    // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
+    // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
+    // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
+    // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
+    // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
 
     // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
     // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
@@ -92,18 +104,24 @@ int main()
     // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
 
     // 0 poisson ratio
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
-    Cs.push_back({550000,  1, 1,  550000,  1,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
+    // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
 
-    scene.optimizeForThicknessDistribution(locations, Cs, "../../../Projects/EoLRods/optimization_output/" + mesh_name);
+    // scene.optimizeForThicknessDistribution(locations, Cs, "../../../Projects/EoLRods/optimization_output/" + mesh_name, "../../../Projects/EoLRods/optimization_output/" + mesh_name + "_radii_graded_h_penalize.dat");
 
-    // scene.finiteDifferenceEstimation({0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
+    // scene.finiteDifferenceEstimation({-0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
+
+    OptimizationProblem p(&scene, "../../../Projects/EoLRods/optimization_output/" + mesh_name);
+    std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(locations, Cs);
+    p.objective_energies.push_back(e);
+    if(!p.Optimize()) std::cout << "Gradient very large\n";
+
     return 0;
 }

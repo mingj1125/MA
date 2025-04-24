@@ -795,15 +795,15 @@ void EoLRodSim::staticSolveIncremental(int step)
 
 bool EoLRodSim::advanceOneStep(int step)
 {
-    std::cout << "===================STEP " << step << "===================" << std::endl;
+    // std::cout << "===================STEP " << step << "===================" << std::endl;
     VectorXT residual;
     residual.resize(W.cols());
     residual.setZero();
     T residual_norm = computeResidual(residual);
     residual_norms.push_back(residual_norm);
-    std::cout << "[NEWTON] iter " << step << "/" 
-        << max_newton_iter << ": residual_norm " 
-        << residual_norm << " tol: " << newton_tol << std::endl;
+    // std::cout << "[NEWTON] iter " << step << "/" 
+        // << max_newton_iter << ": residual_norm " 
+        // << residual_norm << " tol: " << newton_tol << std::endl;
 
     if (residual_norm < newton_tol || step == max_newton_iter)
     {   

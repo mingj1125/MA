@@ -3,7 +3,7 @@
 
 #include "EoLRodSim.h"
 
-class EoLRodSim;
+// class EoLRodSim;
 
 class Scene
 {
@@ -46,6 +46,7 @@ public:
     void buildFEMRodScene(const std::string& filename, int sub_div, bool bc_data = false);
 
     // ------------------------------- Scene Property -------------------------------
+    // EoLRodSim& sim;
     VectorXT rods_radii; // assume circular cross-section
     struct C_info{
 
@@ -59,8 +60,14 @@ public:
     Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt = false);
     void findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::vector<TV> line_directions, bool opt = false);
     void optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tensor, std::string filename);
-    void optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename);
+    void optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename, const std::string start_from_file = "");
     void finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffness_tensor);
+    int num_rods(){return sim.Rods.size();}
+    int num_nodes(){return sim.deformed_states.rows();}
+    void buildSimulationHessian(StiffnessMatrix& K){sim.buildSystemDoFMatrix(K);}
+    void buildSimulationdEdxp(StiffnessMatrix& K){sim.buildForceGradientWrtThicknessMatrix(K);}
+    StiffnessMatrix simulationW(){return sim.W;};
+    VectorXT solveForAdjoint(StiffnessMatrix& K, VectorXT rhs);
 
 private:
 

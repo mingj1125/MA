@@ -238,7 +238,7 @@ void Scene::findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::ve
         }
 
         T rec_width = 0.0001 * sim.unit;
-        TV shear_x_right = TV(0.001*(i%2), 0.001*(i-1), 0.0) * sim.unit;
+        TV shear_x_right = TV(0.001*(i-1), 0.001*(i%2), 0.0) * sim.unit;
         TV shear_x_left = TV(0.0, 0.0, 0) * sim.unit;
 
         auto rec1 = [bottom_left, top_right, shear_x_left, rec_width](
@@ -301,7 +301,7 @@ void Scene::findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::ve
         }
 
         TV shear_x_down = TV(0.0, 0.0, 0.0) * sim.unit;
-        TV shear_x_up = TV(0.001*(i-1), 0.001*(i%2), 0) * sim.unit;
+        TV shear_x_up = TV(0.001*(i%2), 0.001*(i-1), 0) * sim.unit;
         auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
             const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
         {
@@ -480,7 +480,7 @@ void Scene::optimizeForThickness(TV target_location, Vector<T, 6> stiffness_tens
     
 }
 
-void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename){
+void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locations, const std::vector<Vector<T, 6>> stiffness_tensors, const std::string filename, const std::string start_from_file){
     assert(target_locations.size() == stiffness_tensors.size());
 
     int num_directions = 20;
@@ -490,12 +490,32 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
 
-    double step = 5e-1;
+    double step = 1e-2;
     double tol = 0.01;
-    const int ls_max = 5;
-    double minVal = 0.0001;
-    rods_radii.resize(sim.Rods.size());
-    rods_radii.setConstant(6.5e-3);
+    const int ls_max = 10;
+    double minVal = 0.00001;
+    const double cut_lower_bound = 0.000001;
+    double constraint_weight = 1e15;
+
+    if(start_from_file == ""){
+        rods_radii.resize(sim.Rods.size());
+        rods_radii.setConstant(6.5e-3);
+    } else {
+        std::vector<double> rods_radius;
+        std::ifstream in_file(start_from_file);
+        if (!in_file) {
+            std::cerr << "Error opening file for reading: " << start_from_file << std::endl;
+        }
+
+        T a;
+        while (in_file >> a) {
+            rods_radius.push_back(a);
+        }
+        rods_radii.resize(rods_radius.size());
+        for(int i = 0; i < rods_radius.size(); ++i){
+            rods_radii(i) = rods_radius[i];
+        }
+    }
     std::vector<VectorXT> C_current(target_locations.size());
     T err; 
     int num_iterations = 400; int break_iter = num_iterations-1;
@@ -512,36 +532,48 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
             Vector<T, 6> target_C = stiffness_tensors[k];
             C_current[k] = sample_Cs_info[k].C_entry;
             for(int j = 0; j < 6; ++j){
-                // if(j == 2 || j == 4) continue;
-                // else E0 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
 
-                if(j == 2 || j == 1 || j == 4) E0 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
+                // E0 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
+
+                if(j == 2 || j == 4) continue;
+                else E0 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
+
+                // if(j == 2 || j == 1 || j == 4) E0 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
             }
             for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
                 T g = 0;
                 for(int j = 0; j < 6; ++j){
-                    // if(j == 2 || j == 4) continue;
-                    // else g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_thickness[i](j);
 
-                    if(j == 2 || j == 1 || j == 4) g += (sample_Cs_info[k].C_entry(j) - target_C(j))*sample_Cs_info[k].C_diff_thickness[i](j);
+                    // g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_thickness[i](j);
+
+                    if(j == 2 || j == 4) continue;
+                    else g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_thickness[i](j);
+
+                    // if(j == 2 || j == 1 || j == 4) g += (sample_Cs_info[k].C_entry(j) - target_C(j))*sample_Cs_info[k].C_diff_thickness[i](j);
                 }
-                while(std::abs(g)*scale > 1) scale /= 10;
                 gradient_wrt_thickness(i) += g;
             }
             for(int i = 0; i < gradient_wrt_x.size(); ++i){
                 T g = 0;
                 for(int j = 0; j < 6; ++j){
-                    // if(j == 2 || j == 4) continue;
-                    // else g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x[i](j);
 
-                    if(j == 2 || j == 1 || j == 4) g += (sample_Cs_info[k].C_entry(j) - target_C(j))*sample_Cs_info[k].C_diff_x[i](j);
+                    // g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x[i](j);
+
+                    if(j == 2 || j == 4) continue;
+                    else g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x[i](j);
+
+                    // if(j == 2 || j == 1 || j == 4) g += (sample_Cs_info[k].C_entry(j) - target_C(j))*sample_Cs_info[k].C_diff_x[i](j);
                 }
-                // while(std::abs(g)*scale > 1) scale /= 10;
                 gradient_wrt_x(i) += g;
             }
         }
         VectorXT total_gradient_wrt_thickness(sim.Rods.size());
         total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
+        for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
+            E0 += 0.5*constraint_weight*std::max(0.0, minVal-rods_radii(i))*std::max(0.0, minVal-rods_radii(i));
+            total_gradient_wrt_thickness(i) += -constraint_weight*std::max(0.0, minVal-rods_radii(i));
+            while(std::abs(total_gradient_wrt_thickness(i))*scale > 1) scale /= 10;
+        }
        
         int cnt = 0;
         VectorXT rods_radii_current = rods_radii;
@@ -551,22 +583,27 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
             if (cnt > ls_max)
                 break;
             rods_radii = rods_radii_current - step * scale * total_gradient_wrt_thickness;
-            rods_radii = rods_radii.cwiseMax(minVal);
+            rods_radii = rods_radii.cwiseMax(cut_lower_bound);
             T E1 = 0;
             findBestCTensorviaProbing(target_locations, directions, true);
             for(int k = 0; k < target_locations.size(); ++k){
                 C_current[k] = sample_Cs_info[k].C_entry;   
                 Vector<T, 6> target_C = stiffness_tensors[k];
                 for(int j = 0; j < 6; ++j){
-                    // if(j == 2 || j == 4) continue;
-                    // else E1 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j));
 
-                    if(j == 2 || j == 1 || j == 4) E1 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
+                    // E1 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j));
+
+                    if(j == 2 || j == 4) continue;
+                    else E1 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j));
+
+                    // if(j == 2 || j == 1 || j == 4) E1 += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
                 }
-            }    
-            if (E1 - E0 < 0) 
+            }
+            for(int i = 0; i <sim.Rods.size(); ++i)
+                E1 += 0.5*constraint_weight*std::max(0.0, minVal-rods_radii(i))*std::max(0.0, minVal-rods_radii(i));    
+            if (E1 - E0 < 0.0) 
                 break; 
-            scale *= T(0.2);
+            scale *= T(0.5);
         }
         count(iter) = cnt;
         // if(cnt > ls_max) rods_radii = rods_radii_current;
@@ -575,16 +612,16 @@ void Scene::optimizeForThicknessDistribution(const std::vector<TV> target_locati
         for(int k = 0; k < target_locations.size(); ++k){
             Vector<T, 6> target_C = stiffness_tensors[k];
             for(int j = 0; j < 6; ++j){
-                // if(j == 2 || j == 4) continue;
-                // err += std::abs(C_current[k](j) - target_C(j))/std::abs(C_current[k](j));
+                if(j == 2 || j == 4) continue;
+                err += std::abs(C_current[k](j) - target_C(j))/std::abs(C_current[k](j));
 
-                if(j == 2 || j == 1 || j == 4) err += std::abs(C_current[k](j) - target_C(j))/std::abs(C_current[k](j));
+                // if(j == 2 || j == 1 || j == 4) err += std::abs(C_current[k](j) - target_C(j))/std::abs(C_current[k](j));
             }
         }
         err /= target_locations.size();    
         total_gradients[iter] = total_gradient_wrt_thickness;
 
-        if(total_gradient_wrt_thickness.norm()*scale*10 < tol || err < tol) {
+        if(total_gradient_wrt_thickness.norm()*scale/step < tol || err < tol) {
             std::cout << "Found solution at step: " << iter << std::endl; 
             break_iter = iter;
             break;
@@ -649,7 +686,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     }
     std::cout << obj_init << std::endl;
 
-    int test_size = 9; 
+    int test_size = 19; 
     VectorXT errors(test_size); 
     for(int i = 0; i < test_size; ++i){
 
@@ -670,4 +707,26 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     for(int i = 1; i < test_size; ++i){
         std::cout <<  delta_h(0)/std::pow(2, i)  << " - " << errors(i-1)/errors(i) << std::endl;
     }
+}
+
+Matrix<T, Eigen::Dynamic, 1> Scene::solveForAdjoint(StiffnessMatrix& K, VectorXT rhs){
+    VectorXT ddq(sim.W.cols());
+    ddq.setZero();
+
+    // StiffnessMatrix K;
+    K.setZero();
+    sim.buildSystemDoFMatrix(K);
+    bool success = sim.linearSolve(K, rhs, ddq);
+    if (!success){
+        std::cout << "Not succeed in adjoint\n";
+        return VectorXT::Zero(sim.Rods.size());
+    }
+
+    // T norm = ddq.norm();
+    // std::cout << norm << std::endl;
+    StiffnessMatrix fd_thickness;
+    sim.buildForceGradientWrtThicknessMatrix(fd_thickness);
+    VectorXT dxd_thickness = -fd_thickness.transpose() * ddq;
+    
+    return dxd_thickness;  
 }

@@ -109,7 +109,7 @@ void EoLRodSim::addStretchingForceDiffThickness(std::vector<Entry>& entry_K)
             F.setZero();
             computeEoLRodStretchingEnergyGradient(rod->ks, Xi, Xj, xi, xj, F);
             F = F * 2 / rod->b;
-            F *= -1.0;
+            // F *= -1.0;
 
             std::vector<int> nodes = { node_i, node_j };
 
@@ -175,11 +175,11 @@ Eigen::VectorXd EoLRodSim::solveAdjointForOptimization(const VectorXT& dobj_dx)
         return VectorXT::Zero(Rods.size());
     }
 
-    T norm = ddq.norm();
+    // T norm = ddq.norm();
     // std::cout << norm << std::endl;
     StiffnessMatrix fd_thickness;
     buildForceGradientWrtThicknessMatrix(fd_thickness);
-    VectorXT dxd_thickness = fd_thickness.transpose() * ddq;
+    VectorXT dxd_thickness = -fd_thickness.transpose() * ddq;
     
     return dxd_thickness;  
 }
