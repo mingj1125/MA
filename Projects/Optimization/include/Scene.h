@@ -3,6 +3,7 @@
 
 #include "vector_manipulation.h"
 #include "Simulation.h"
+#include <iostream>
 
 class Scene
 {
@@ -51,8 +52,6 @@ public:
     Matrix3a returnApproxStressInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     Matrix3a returnApproxStrainInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
 
-    // ------------------------------- Common Function -------------------------------
-    void apply_parameter_to_sim();
 };
 
 #endif

@@ -150,6 +150,24 @@ void MassSpring::computeBoundingBox(Vector3a& top_right, Vector3a& bottom_left){
 
 }
 
+void MassSpring::ApplyBoundaryStretch(int i){
+
+    switch (i)
+    {
+    case 1:
+        stretchX(1.01);
+        break;
+    case 2:    
+        stretchY(1.01);
+        break;
+    case 3:
+        stretchDiagonal(1.011); 
+        break;   
+    default:
+        break;
+    }
+}
+
 void MassSpring::stretchX(AScalar strain){
 
     resetSimulation();
@@ -160,7 +178,7 @@ void MassSpring::stretchX(AScalar strain){
         Vector3a X = rest_states.segment(3*i, 3);
         if(X(0) < tol) {
             fixed_vertices.push_back(i*3);
-            // fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i, 0) = X(0,0)*strain;
@@ -168,7 +186,7 @@ void MassSpring::stretchX(AScalar strain){
         }
         else if(X(0) > 1.0 - tol) {
             fixed_vertices.push_back(i*3);
-            // fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i, 0) = X(0,0)*strain;
@@ -176,6 +194,53 @@ void MassSpring::stretchX(AScalar strain){
         }
     }
     // std::cout << count << std::endl;
+}
+
+void MassSpring::stretchY(AScalar strain){
+
+    resetSimulation();
+    AScalar tol = 1e-9;
+
+    for(int i = 0; i < n_nodes; ++i){
+        Vector3a X = rest_states.segment(3*i, 3);
+        if(X(1) < tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1, 0) = X(1,0)*strain;
+        }
+        else if(X(1) > 1.0 - tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1, 0) = X(1,0)*strain;
+        }
+    }
+}
+
+void MassSpring::stretchDiagonal(AScalar strain){
+
+    resetSimulation();
+    AScalar tol = 1e-9;
+
+    for(int i = 0; i < n_nodes; ++i){
+        Vector3a X = rest_states.segment(3*i, 3);
+        if(X(0) < tol && X(1) < tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+        }
+        else if(X(0) > 1.0 - tol && X(1) > 1.0 - tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1, 0) = X(1,0)*strain;
+            deformed_states(3*i, 0) = X(0,0)*strain;
+        }
+    }
 }
 
 damped_newton_result MassSpring::Simulate()

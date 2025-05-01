@@ -16,9 +16,13 @@ public:
     virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
     virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
     virtual void setOptimizationParameter(VectorXa parameters){}
+    virtual MatrixXa getStressGradientWrtParameter(){}
+    virtual MatrixXa getStressGradientWrtx(){}
+    virtual MatrixXa getStrainGradientWrtx(){}
     virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){}
 
+    virtual void ApplyBoundaryStretch(int i){}
     virtual damped_newton_result Simulate(){}
 
 };

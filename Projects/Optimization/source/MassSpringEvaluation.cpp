@@ -394,7 +394,7 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
     Matrix3a x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
     auto F = x.transpose();
     // assume constant thickness of the material 
-    if(F(2,2) == 0.) F(2,2) = 1;
+    // if(F(2,2) == 0.) F(2,2) = 1;
 
     eval_info_of_sample.F_gradients_wrt_x = std::vector<Matrix3a>(deformed_states.rows());
     for(int i = 0; i < deformed_states.rows(); ++i){
@@ -405,3 +405,12 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
 
     return F;
 }
+
+MatrixXa MassSpring::getStrainGradientWrtx(){
+    MatrixXa gradient(3, deformed_states.rows());
+    for(int j = 0; j < deformed_states.rows(); ++j){
+        Matrix3a G = 0.5*(eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F_gradients_wrt_x[j] + eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F_gradients_wrt_x[j]);
+        gradient.col(j) = Vector3a{G(0,0), G(1,1), 2*G(1, 0)};
+    }
+    return gradient;
+}    

@@ -69,6 +69,10 @@ class MassSpring : public Simulation {
     }
     virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){}
+    virtual void ApplyBoundaryStretch(int i);
+    virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_spring_thickness;}
+    virtual MatrixXa getStressGradientWrtx(){return eval_info_of_sample.stress_gradients_wrt_x;}
+    virtual MatrixXa getStrainGradientWrtx();
 
     // Native function for mass spring 
     void addPoint(std::vector<Vector3a>& existing_nodes, 
@@ -77,6 +81,8 @@ class MassSpring : public Simulation {
     void resetSimulation();  
     void computeBoundingBox(Vector3a& top_right, Vector3a& bottom_left);
     void stretchX(AScalar strain);    
+    void stretchY(AScalar strain);
+    void stretchDiagonal(AScalar strain);
 
     // Native function for evaluation
     Vector3a computeWeightedStress(const Vector3a sample_loc, const Vector3a direction, 
