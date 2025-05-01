@@ -29,8 +29,6 @@ struct damped_newton_options
 
     int n_constraints = 0;
 
-    std::string output_log = "";
-
     Eigen::SparseMatrix<AScalar> damp_matrix;
 
     damped_newton_solver_type solver_type = DN_SOLVER_LLT;
@@ -41,7 +39,6 @@ struct damped_newton_result {
     int n_iterations_accepted;
     AScalar cost;
     AScalar gradient;
-    VectorXa gradient_vec;
 };
 
 class DampedNewtonSolver {
@@ -58,7 +55,6 @@ public:
     void SetParameters(VectorXa& parameters_p);
     void SetOptions(damped_newton_options&& options_p);
     void SetCostFunction(CostFunction* function_p);
-    void GetParameters(VectorXa& parameters_p){parameters_p = parameters;}
 
     damped_newton_result Solve();
 

@@ -21,6 +21,7 @@ public:
 	Eigen::SparseMatrix<AScalar> weights_p;
 
     std::string output_loc;
+    const double cut_lower_bound = 0.001;
 
 	std::function<bool(VectorXa&)> check_if_valid_p = [](VectorXa& parameters){return true;};
 	std::function<void(VectorXa&)> on_iteration_accept = [](VectorXa& parameters){};

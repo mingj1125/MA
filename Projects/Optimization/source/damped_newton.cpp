@@ -33,7 +33,7 @@ void DampedNewtonSolver::SetCostFunction(CostFunction* function_p)
 
 AScalar DampedNewtonSolver::MaxJtJDiagonalValue(Eigen::SparseMatrix<AScalar>& A)
 {
-    AScalar max = std::abs(A.coeff(0,0));
+    AScalar max = abs(A.coeff(0,0));
 
     for(int i=1; i<A.rows(); ++i)
         max = std::max(max, std::abs(A.coeff(i,i)));
@@ -59,15 +59,9 @@ damped_newton_result DampedNewtonSolver::Solve()
     damped_newton_result result;
     result.n_iterations = 0;
     result.n_iterations_accepted = 0;
-    std::ofstream outputlog(options.output_log+".log");
 
-    if(options.use_log){
+    if(options.use_log)
         std::cout << std::setw(10) << "# Iter" << std::setw(20) << "dir" << std::setw(20) << "h norm" << std::setw(20) << "Cost" << std::setw(20) << "New Cost" << std::setw(20) << "r norm" << std::setw(20) << "r_new norm" << std::endl;
-        if (!outputlog) {
-            std::cerr << "Error opening file for writing: " << options.output_log << std::endl;
-        } 
-        outputlog << std::setw(10) << "# Iter" << std::setw(20) << "dir" << std::setw(20) << "h norm" << std::setw(20) << "Cost" << std::setw(20) << "New Cost" << std::setw(20) << "r norm" << std::setw(20) << "r_new norm" << std::endl;
-    }
 
     Eigen::SparseMatrix<AScalar> I(parameters.rows(), parameters.rows());
     //Eigen::SparseMatrix<AScalar> D;
@@ -83,7 +77,7 @@ damped_newton_result DampedNewtonSolver::Solve()
     int k=0; AScalar nu=2; bool found=false;
     Eigen::SparseMatrix<AScalar> J(parameters.rows(), parameters.rows());
     VectorXa r(parameters.rows());
-//std::cout << parameters.rows() << std::endl;
+    // std::cout << parameters.rows() << std::endl;
     function->PreProcess(parameters);
 
     AScalar Fx;
@@ -110,8 +104,7 @@ damped_newton_result DampedNewtonSolver::Solve()
     }
 
     // iterations_file << k << " " << Fx << " " << r.lpNorm<Eigen::Infinity>() << std::endl;
-    // std::cout << k << " " << Fx << " " << r.lpNorm<Eigen::Infinity>() << " " << J.norm() << std::endl;
-
+    
     function->AcceptStep();
 
     MatrixXa U,C,V; //Woodbury
@@ -122,7 +115,6 @@ damped_newton_result DampedNewtonSolver::Solve()
     AScalar g_norm = g.lpNorm<Eigen::Infinity>();
 
     result.gradient = r.lpNorm<Eigen::Infinity>();
-    result.gradient_vec = r;
     result.cost = Fx;
     //std::cout << A.rows() << " " << A.cols() << " " << g_norm <<  std::endl;
 
@@ -148,7 +140,7 @@ damped_newton_result DampedNewtonSolver::Solve()
     //Eigen::CholmodSimplicialLDLT<Eigen::SparseMatrix<AScalar>> l_solver_lu;
     //Eigen::SimplicialLDLT<Eigen::SparseMatrix<AScalar>, Eigen::Upper > l_solver_lu;
     //Eigen::SimplicialLDLT<Eigen::SparseMatrix<AScalar> > l_solver_lu;
-    // Eigen::SuperLU<Eigen::SparseMatrix<AScalar> > l_solver_lu;
+    //Eigen::SuperLU<Eigen::SparseMatrix<AScalar> > l_solver_lu;
     Eigen::SparseLU<Eigen::SparseMatrix<AScalar> > l_solver_lu;
     #endif
 
@@ -272,7 +264,7 @@ damped_newton_result DampedNewtonSolver::Solve()
                 int np = 0;
                 int nn = 0;
                 int nz = 0;
-                double EPS_ZERO = 1e-3;
+                double EPS_ZERO = 1e-6;
                 double EPS_ZERO_PSD = 1e-6;
                 
                 // for (int i = 0; i < l_solver_lu.vectorD().size(); i++)
@@ -302,11 +294,9 @@ damped_newton_result DampedNewtonSolver::Solve()
                 {
                     h = l_solver_lu.solve(ng);
 
-
                     if((Hm*h-ng).norm() > EPS_ZERO)
                     {
                         std::cout << "Couldn't solve system" << std::endl;
-                        std::cout << "Err = " << (Hm*h-ng).norm() << std::endl;
 
                         mu = mu*nu;
                         nu = 2.0*nu;
@@ -443,29 +433,18 @@ damped_newton_result DampedNewtonSolver::Solve()
 
             if(options.use_log) {
                 std::cout << std::setw(10) << k << std::setw(20) << r.dot(h)/(r.norm()*h.norm()) << std::setw(20) << h_norm
-                          << std::setw(20) << Fx << std::setw(20);     
-                outputlog << std::setw(10) << k << std::setw(20) << r.dot(h)/(r.norm()*h.norm()) << std::setw(20) << h_norm
-                          << std::setw(20) << Fx << std::setw(20);// << std::endl;;    
-                if(valid){
+                          << std::setw(20) << Fx << std::setw(20);
+                if(valid)
                     std::cout << Fx_new;
-                    outputlog << Fx_new;
-                }
-                else{
+                else
                     std::cout << "N/A";
-                    outputlog << "N/A";
-                }
 
                 std::cout << std::setw(20) << r.lpNorm<Eigen::Infinity>() << std::setw(20);
-                outputlog << std::setw(20) << r.lpNorm<Eigen::Infinity>() << std::setw(20);
 
-                if(valid){
+                if(valid)
                     std::cout << r_new.lpNorm<Eigen::Infinity>();
-                    outputlog << r_new.lpNorm<Eigen::Infinity>();
-                }
-                else{
+                else
                     std::cout << "N/A";
-                    outputlog << "N/A";
-                }
             }
 
             if(options.use_log && options.benchmark) {
@@ -473,8 +452,6 @@ damped_newton_result DampedNewtonSolver::Solve()
                 ss << "D=" << decomposer_time/1000.0 << "s E="
                    << evaluation_time/1000.0 << "s T=" << total_time/1000.0 << "s";
                 std::cout << std::setw(36) << ss.str();
-
-                outputlog << std::setw(36) << ss.str();
             }
 
             //AScalar L_dem = 0.5*(h.dot(mu*h-g));
@@ -489,7 +466,7 @@ damped_newton_result DampedNewtonSolver::Solve()
             //VectorXa g_new = J_new.matrix.transpose()*r_new;
             //AScalar gamma = g_norm-g_new.dot(g_new);
 
-            // std::cout << gamma << std::endl;
+            //std::cout << gamma << std::endl;
             if((gamma > 0 && valid) || (options.accept_everything && gamma_g>0 && valid))
                 //if(valid)
             {
@@ -498,10 +475,8 @@ damped_newton_result DampedNewtonSolver::Solve()
                 function->AcceptStep();
                 ++result.n_iterations_accepted;
 
-                if(options.use_log){
+                if(options.use_log)
                     std::cout << std::setw(20) << "ACCEPTED";
-                    outputlog << std::setw(20) << "ACCEPTED";
-                }
 
                 parameters = x_new;
 
@@ -513,7 +488,6 @@ damped_newton_result DampedNewtonSolver::Solve()
                 g_norm = g.lpNorm<Eigen::Infinity>();
 
                 result.gradient = r.lpNorm<Eigen::Infinity>();
-                result.gradient_vec = r;
                 result.cost = Fx;
 
                 if(g_norm <= options.global_stopping_criteria)
@@ -535,24 +509,18 @@ damped_newton_result DampedNewtonSolver::Solve()
                 function->RejectStep();
 
                 if(options.use_log) {
-                    if (!valid){
+                    if (!valid)
                         std::cout << std::setw(20) << "EXTERN REJECTED";
-                        outputlog << std::setw(20) << "EXTERN REJECTED";
-                    }
-                    else{
+                    else
                         std::cout << std::setw(20) << "REJECTED";
-                        outputlog << std::setw(20) << "REJECTED";
-                    }
                 }
 
                 mu = mu*nu;
                 nu = 2.0*nu;
             }
 
-            if(!options.check_matrix){
+            if(!options.check_matrix)
                 std::cout << std::endl;
-                outputlog << std::endl;
-            }
             else {
                 if (J_new.cols() == J_new.rows()) {
                     Eigen::SimplicialLLT<Eigen::SparseMatrix<AScalar> > llt(J_new);
@@ -573,7 +541,6 @@ damped_newton_result DampedNewtonSolver::Solve()
     }
 
     function->Finalize(parameters);
-    outputlog.close();
 
     return result;
 }	

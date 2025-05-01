@@ -46,10 +46,11 @@ bool OptimizationProblem::Optimize()
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 1;
+	options.damping = 5e-5;
 	options.global_stopping_criteria = 1e-3;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
+	options.output_log = output_loc;
 
 	DampedNewtonSolver solver;
 	solver.SetParameters(parameters);
@@ -57,11 +58,19 @@ bool OptimizationProblem::Optimize()
 	solver.SetOptions(std::move(options));
 	damped_newton_result result = solver.Solve();
 	solver.GetParameters(parameters);
-	std::cout << parameters.segment(x.rows(), p.rows()).transpose();
+
+	// std::cout << result.gradient_vec.segment(x.rows(), p.rows()).transpose() << std::endl;
+	// std::cout << std::endl;
+	AScalar Fx; VectorXa r; Eigen::SparseMatrix<AScalar> J;
+	AScalar step = 1e-11;
+	for(int i = -10; i < 15; i++){
+		VectorXa test_param = i * step * result.gradient_vec + parameters;
+		std::tie(Fx, r, J) = cost_function.Evaluate(test_param);
+		std::cout << "Step " << i << " : " << Fx << std::endl;
+		std::cout << "Grad " << i << " : " << r.lpNorm<Eigen::Infinity>() << std::endl;
+	}
 
 	VectorXa rods_radii = parameters.segment(x.rows(), p.rows());
-	rods_radii = rods_radii.cwiseMax(0.001);
-	std::ofstream out(output_loc+"_C.dat");
     std::cout << rods_radii.transpose() << std::endl; 
     std::ofstream out_file(output_loc+"_radii.dat");
     if (!out_file) {
@@ -106,7 +115,7 @@ AScalar OptimizationProblemCostFunction::ComputeEnergy()
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		AScalar energy_ele = data->objective_energies[i]->ComputeEnergy(data->scene);
-		std::cout << "Energy " << i << ": " << energy_ele << std::endl;
+		// std::cout << "Energy " << i << ": " << energy_ele << std::endl;
 		energy += energy_ele;
 	}
 
@@ -140,14 +149,11 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 {
 	VectorXa gradient(data->x.rows()*2+data->p.rows()); gradient.setZero();
 
-	// auto d_temp = dcdx;
-	// VectorXa dd = data->scene->solveForAdjoint(dcdx, dfdx);
-	// std::cout << "Simulation Diff: " << (d_temp-dcdx).norm() << std::endl;
-
 	Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar> > solver(dcdx);
 	VectorXa dd = solver.solve(dfdx);
 
 	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp - dcdp.transpose() * dd);
+	std::cout << "Gradient 2-norm: " << gradient.norm() << std::endl;
 
 	return gradient;
 }
@@ -220,7 +226,6 @@ OptimizationProblemCostFunction::OptimizationProblemCostFunction(OptimizationPro
 void OptimizationProblemCostFunction::TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters)
 {
 	new_parameters = prev_parameters + step;
-	// const double cut_lower_bound = 0.001;
 	// new_parameters.segment(data->x.rows(), data->p.rows()) = new_parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(cut_lower_bound);
 }
 
@@ -235,8 +240,7 @@ cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parame
 
 	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
 	data->scene->rods_radii = data->full_p;
-	const double cut_lower_bound = 0.001;
-	data->scene->rods_radii = data->scene->rods_radii.cwiseMax(cut_lower_bound);
+	data->scene->rods_radii = data->scene->rods_radii.cwiseMax(data->cut_lower_bound);
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);
@@ -266,7 +270,7 @@ void OptimizationProblemCostFunction::AcceptStep()
 
 void OptimizationProblemCostFunction::Finalize(const VectorXa& parameters)
 {
-	data->p = parameters.segment(data->x.rows(), data->p.rows());
+	data->p = parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(data->cut_lower_bound);
 }
 
 void OptimizationProblem::TestSensitivityGradient(){

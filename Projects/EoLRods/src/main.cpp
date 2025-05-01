@@ -17,10 +17,10 @@ int main()
     std::string mesh_name = "grid_double_refined";
     scene.buildFEMRodScene("../../../Projects/EoLRods/data/"+mesh_name+".obj", 0);
     
-    App app(sim);
-    app.initializeScene(mesh_name);
-    // app.initializeScene();
-    app.run();
+    // App app(sim);
+    // app.initializeScene(mesh_name);
+    // // app.initializeScene();
+    // app.run();
 
     // int num_directions = 20;
     // std::vector<Eigen::Vector3d> directions;
@@ -40,7 +40,7 @@ int main()
     //     rods_radius.push_back(a);
     // }
     // scene.rods_radii.resize(rods_radius.size());
-    // scene.rods_radii.setConstant(1e-2);
+    // // scene.rods_radii.setConstant(1e-2);
     // for(int i = 0; i < rods_radius.size(); ++i){
     //     scene.rods_radii(i) = rods_radius[i];
     // }
@@ -54,12 +54,12 @@ int main()
     locations.push_back({-0.76, 0.76, 0});
     locations.push_back({-0.50, 0.76, 0});
     locations.push_back({-0.24, 0.76, 0});
-    // locations.push_back({-0.76, 0.50, 0});
-    // locations.push_back({-0.50, 0.50, 0});
-    // locations.push_back({-0.24, 0.50, 0});
-    // locations.push_back({-0.76, 0.24, 0});
-    // locations.push_back({-0.50, 0.24, 0});
-    // locations.push_back({-0.24, 0.24, 0});
+    locations.push_back({-0.76, 0.50, 0});
+    locations.push_back({-0.50, 0.50, 0});
+    locations.push_back({-0.24, 0.50, 0});
+    locations.push_back({-0.76, 0.24, 0});
+    locations.push_back({-0.50, 0.24, 0});
+    locations.push_back({-0.24, 0.24, 0});
 
     // 2 points double refined 
     // locations.push_back({-0.6, 0.56, 0});
@@ -70,20 +70,8 @@ int main()
     // scene.optimizeForThickness({0.4, 0.53, 0}, {3.1e5, 8e4, 1.5e4, 4e5, 4e4, 2e5}, "../../../Projects/EoLRods/optimization_output/" + mesh_name);
 
     std::vector<Vector<T, 6>> Cs;
-
-    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
-    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
-    Cs.push_back({450372*2,  450372, 310.317, 450372*2, 310.317,  757525});
-
-    // graded h
-    // Cs.push_back({275898,  114118, -98.0969,   275898, -98.4388,   227295});
-    // Cs.push_back({283301,  118896,  1982.7,    274087,   975.949,  237808});
-    // Cs.push_back({275897,  114117, 105.013,  275897, 105.013,  227290});
-    // Cs.push_back({591502,  253556, 1145.79,  608181, 1912.53,  507416});
-    // Cs.push_back({599134,   257014, -1702.38,   598291, -808.859,   5137930});
-    // Cs.push_back({591685,   253869, -833.522,   607971,  -1903.6,   505923});
+    
     // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
-
     // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
     // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
     // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
@@ -92,16 +80,6 @@ int main()
     // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
     // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
     // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
-
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
-    // Cs.push_back({550000,  150000, -150,  550000,  -150,  200000});
 
     // 0 poisson ratio
     // Cs.push_back({550000,  0, 0,  550000,  0,  200000});
@@ -118,10 +96,11 @@ int main()
 
     // scene.finiteDifferenceEstimation({-0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
 
-    OptimizationProblem p(&scene, "../../../Projects/EoLRods/optimization_output/" + mesh_name);
-    std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(locations, Cs);
+    OptimizationProblem p(&scene, "../../../Projects/EoLRods/optimization_output/" + mesh_name);//, "../../../Projects/EoLRods/optimization_output/" + mesh_name + "_radii_debug.dat");
+    // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(locations, Cs);
+    std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(locations);
     p.objective_energies.push_back(e);
-    if(!p.Optimize()) std::cout << "Gradient very large\n";
+    if(!p.Optimize()) std::cout << "\n Gradient very large \n";
 
     return 0;
 }

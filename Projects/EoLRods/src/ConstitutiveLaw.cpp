@@ -656,8 +656,15 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
         double angle = i*2*M_PI/num_directions; 
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
-    rods_radii.resize(sim.Rods.size());
-    rods_radii.setConstant(6e-3);
+    const double rod_size = 8e-3;
+    if(rods_radii.rows() == 0){
+        rods_radii.resize(sim.Rods.size());
+        rods_radii.setConstant(rod_size);
+    }
+    VectorXT rods_radii_save = rods_radii;
+    // const double rod_size = 8e-3;
+    // rods_radii.resize(sim.Rods.size());
+    // rods_radii.setConstant(rod_size);
     findBestCTensorviaProbing(target_location, directions, true);
     double minVal = 0.0001;
     VectorXT gradient_wrt_thickness(sim.Rods.size());
@@ -666,7 +673,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
         T g = 0;
         for(int j = 0; j < 1; ++j){
-            g += 2*(C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))*C_diff_thickness[i](j);
+            g += 2*(C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))/std::abs(stiffness_tensor(j))*C_diff_thickness[i](j);
         }
         gradient_wrt_thickness(i) = g;
     }
@@ -674,7 +681,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     for(int i = 0; i < gradient_wrt_x.size(); ++i){
         T g = 0;
         for(int j = 0; j < 1; ++j){
-            g += 2*(C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))*C_diff_x[i](j);
+            g += 2*(C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))/std::abs(stiffness_tensor(j))*C_diff_x[i](j);
         }
         gradient_wrt_x(i) = g;
     }
@@ -682,7 +689,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
     T obj_init = 0;
     for(int j = 0; j < 1; ++j){
-        obj_init += (C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+        obj_init += (C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))/std::abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
     }
     std::cout << obj_init << std::endl;
 
@@ -691,13 +698,13 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     for(int i = 0; i < test_size; ++i){
 
         T obj_1 = obj_init + (gradient_wrt_thickness).transpose() * (delta_h/std::pow(2, i));
-        rods_radii.setConstant(6e-3);
+        rods_radii = rods_radii_save;
         rods_radii += delta_h/std::pow(2, i);
         rods_radii = rods_radii.cwiseMax(minVal);
         findBestCTensorviaProbing(target_location, directions, true);
         T obj_2 = 0;
         for(int j = 0; j < 1; ++j){
-            obj_2 += (C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
+            obj_2 += (C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))/std::abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
         }
         // std::cout << " T(h) + Nabla T delta h: " << obj_1 << std::endl;
         // std::cout << " T(h+delta h): " << obj_2 << std::endl;
