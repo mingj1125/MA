@@ -109,6 +109,29 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("stress xy", stress_xy);
         probes->addScalarQuantity("stress yy", stress_yy);
     }
+    if (ImGui::Button("Visualize Strain")){
+        std::vector<AScalar> strain_xx(sample_loc.size());
+        std::vector<AScalar> strain_xy(sample_loc.size());
+        std::vector<AScalar> strain_yy(sample_loc.size());
+
+        std::vector<Vector3a> directions;
+        for(int i = 0; i < scene->num_directions; ++i) {
+            AScalar angle = i*2*M_PI/scene->num_directions; 
+            directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
+        }
+        int idx = 0;
+        for(auto sample_location: sample_loc){
+            auto strain = scene->returnApproxStrainInCurrentSimulation(sample_location, directions);
+            strain_xx.at(idx) = strain(0,0);
+            strain_xy.at(idx) = strain(1,0);
+            strain_yy.at(idx) = strain(1,1);
+            ++idx;
+        }
+
+        probes->addScalarQuantity("strain xx", strain_xx);
+        probes->addScalarQuantity("strain xy", strain_xy);
+        probes->addScalarQuantity("strain yy", strain_yy);
+    }
 }
 
 void Visualization::updateCurrentVertex(){

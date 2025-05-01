@@ -160,7 +160,7 @@ void MassSpring::stretchX(AScalar strain){
         Vector3a X = rest_states.segment(3*i, 3);
         if(X(0) < tol) {
             fixed_vertices.push_back(i*3);
-            fixed_vertices.push_back(i*3+1);
+            // fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i, 0) = X(0,0)*strain;
@@ -168,7 +168,7 @@ void MassSpring::stretchX(AScalar strain){
         }
         else if(X(0) > 1.0 - tol) {
             fixed_vertices.push_back(i*3);
-            fixed_vertices.push_back(i*3+1);
+            // fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i, 0) = X(0,0)*strain;

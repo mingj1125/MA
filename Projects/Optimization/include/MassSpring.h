@@ -15,6 +15,7 @@ class MassSpring : public Simulation {
         const AScalar YoungsModulus = 3.5e6;
         Vector3a rest_tangent;
         AScalar width;
+        AScalar height = 0.01;
     
         Spring(int u_id, int v_id, int id, Vector3a u_pos, Vector3a v_pos){
             p1 = u_id;
@@ -28,7 +29,7 @@ class MassSpring : public Simulation {
         }
 
         AScalar k_s(){
-            return YoungsModulus * width * width;
+            return YoungsModulus * width * height;
         }
 
         Matrix3a computeSecondPiolaStress(Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj);
@@ -49,8 +50,7 @@ class MassSpring : public Simulation {
         MatrixXa stress_gradients_wrt_x;
         Matrix3a stress_tensor;
 
-        MatrixXa strain_gradients_wrt_spring_thickness;
-        MatrixXa strain_gradients_wrt_x;
+        std::vector<Matrix3a> F_gradients_wrt_x;
         Matrix3a strain_tensor;
     };
     EvaluationInfo eval_info_of_sample; // not using a vector for samples since have to do sample eval one by one anyways
@@ -60,7 +60,7 @@ class MassSpring : public Simulation {
     virtual VectorXa get_deformed_nodes(){return deformed_states;}
     virtual std::vector<std::array<size_t, 2>> get_edges();
     virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
-    virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
+    virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     virtual void setOptimizationParameter(const VectorXa& parameters){
         spring_widths = parameters;
         for(auto spring: springs){
@@ -86,6 +86,7 @@ class MassSpring : public Simulation {
         Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes, bool diff);
     Eigen::Matrix<AScalar, 18, 3> SGradientWrtx(Spring* spring, Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj);
     AScalar integrateKernelOverDomain(const Vector3a sample_loc, const Vector3a line_direction);
+    Matrix3a computeWeightedDeformationGradient(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
 
     // Simulator    
     AScalar global_stopping_criteria = 1e-5;
