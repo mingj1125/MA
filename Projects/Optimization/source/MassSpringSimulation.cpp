@@ -5,17 +5,6 @@
 #include <iostream>
 #include <Eigen/Eigen>
 
-// std::vector<Eigen::Triplet<AScalar>> SparseMatrixToTriplets(const Eigen::SparseMatrix<AScalar>& A)
-// {
-// 	std::vector<Eigen::Triplet<AScalar> > triplets;
-
-// 	for (int k=0; k < A.outerSize(); ++k)
-//         for (Eigen::SparseMatrix<AScalar>::InnerIterator it(A,k); it; ++it)
-//         	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
-
-//     return triplets;
-// }
-
 Eigen::SparseMatrix<AScalar> EnforceSquareMatrixConstraints(Eigen::SparseMatrix<AScalar>& old, std::vector<int>& constraints, bool fill_ones = false)
 {
 
@@ -240,7 +229,7 @@ void MassSpring::stretchDiagonal(AScalar strain){
             fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
-            deformed_states(3*i+1, 0) = X(1,0)*strain;
+            deformed_states(3*i+1, 0) = X(1,0)*strain + 0.01;
             deformed_states(3*i, 0) = X(0,0)*strain;
         }
     }

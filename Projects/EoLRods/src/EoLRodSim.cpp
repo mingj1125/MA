@@ -239,23 +239,38 @@ T EoLRodSim::computeTotalEnergy(bool verbose)
     T E_stretching = 0, E_bending = 0, E_shearing = 0, E_twisting = 0, E_bending_twisting = 0,
         E_eul_reg = 0, E_pbc = 0, E_penalty = 0, E_contact = 0;
     
-    if (add_stretching)
+    if (add_stretching){
         E_stretching += addStretchingEnergy();
+        // std::cout << "Energy: " << addStretchingEnergy() << std::endl;
+    }
     if (add_bending && add_twisting)
     {
         E_bending_twisting = add3DBendingAndTwistingEnergy();
+        std::cout << "2\n";
     }
-    if (add_pbc_bending || add_pbc_twisting)
+    if (add_pbc_bending || add_pbc_twisting){
         E_bending_twisting += add3DPBCBendingAndTwistingEnergy(add_pbc_bending, add_pbc_twisting);
-    if (add_rigid_joint)
+        std::cout << "3\n";
+    }
+    if (add_rigid_joint){
         E_bending_twisting += addJointBendingAndTwistingEnergy();
+        // std::cout << "4\n";
+        // std::cout << "Energy: " << addJointBendingAndTwistingEnergy() << std::endl;
+    }
     
-    if (add_pbc)
+    if (add_pbc){
         E_pbc += addPBCEnergy();
-    if (add_eularian_reg)
+        std::cout << "5\n";
+    }
+    if (add_eularian_reg){
         E_eul_reg += addRegularizingEnergy();
-    if (add_contact_penalty)
+        std::cout << "6\n";
+    }
+    if (add_contact_penalty){
         E_contact += addParallelContactEnergy();
+        std::cout << "7\n";
+    }
+
     total_energy = E_stretching + E_bending + E_shearing + E_twisting + E_bending_twisting + E_eul_reg + E_pbc + E_penalty + E_contact;
     
     if (verbose)

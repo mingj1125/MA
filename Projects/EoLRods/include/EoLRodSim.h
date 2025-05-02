@@ -548,8 +548,10 @@ public:
     // RodStressDiff.cpp
     Matrix<T, 18, 3> SGradientWrtx(Rod* rod, int rod_idx);
     void addStretchingForceDiffThickness(std::vector<Entry>& entry_K);
+    void addJointBendingAndTwistingForceDiffThickness(std::vector<Entry>& entry_K);
     void buildForceGradientWrtThicknessMatrix(StiffnessMatrix& K);
     VectorXT solveAdjointForOptimization(const VectorXT& dobj_dx);
+    void buildSimulationHessian(StiffnessMatrix& K);
 };
 
 #endif

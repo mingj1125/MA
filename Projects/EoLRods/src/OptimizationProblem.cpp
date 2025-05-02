@@ -141,19 +141,30 @@ void OptimizationProblemCostFunction::UpdateSensitivities(){
 		d2fdxp += data->objective_energies[i]->Compute_d2fdxp(data->scene);
 		d2fdp2 += data->objective_energies[i]->Compute_d2fdp2(data->scene);
 	}
-	data->scene->solveForAdjoint(dcdx, dfdx);
-	
+
+	int count = 0;
+	mark.resize(data->x.rows(), 1); mark.setZero();
+	for(int i = 0; i < dfdx.rows(); ++i){
+		if(std::abs(dfdx(i)) > 1e-10) {
+			++count;
+			mark(i) = 1;
+		}
+	}
+	std::cout << "dfdx zero: " << count << " from total entry " << dfdx.rows() << std::endl; 
+	std::cout << "dcdx norm: " << dcdx.norm() << std::endl;
+
 }
 
 VectorXa OptimizationProblemCostFunction::ComputeGradient()
 {
 	VectorXa gradient(data->x.rows()*2+data->p.rows()); gradient.setZero();
+	// Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar> > solver(dcdx);
+	auto& tmp = dcdx;
+	VectorXa dd = data->scene->solveForAdjoint(tmp,dfdx);
+	// VectorXa dd = solver.solve(dfdx);
 
-	Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar> > solver(dcdx);
-	VectorXa dd = solver.solve(dfdx);
-
-	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp - dcdp.transpose() * dd);
-	std::cout << "Gradient 2-norm: " << gradient.norm() << std::endl;
+	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp-(dcdp.transpose() * dd));
+	// std::cout << "Gradient 2-norm: " << gradient.norm() << std::endl;
 
 	return gradient;
 }
@@ -165,7 +176,7 @@ Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunction::ComputeHessian()
 	std::vector<Eigen::Triplet<AScalar>> triplets;
 
 	std::vector<Eigen::Triplet<AScalar> > A = SparseMatrixToTriplets(d2fdx2);
-	std::vector<Eigen::Triplet<AScalar> > B = SparseMatrixToTriplets(d2fdxp);
+	std::vector<Eigen::Triplet<AScalar> > B = SparseMatrixToTriplets(d2fdxp.transpose());
 	std::vector<Eigen::Triplet<AScalar> > C = SparseMatrixToTriplets(d2fdp2);
 	std::vector<Eigen::Triplet<AScalar> > dcdx_t = SparseMatrixToTriplets(dcdx);
 	std::vector<Eigen::Triplet<AScalar> > dcdp_t = SparseMatrixToTriplets(dcdp);
@@ -226,6 +237,9 @@ OptimizationProblemCostFunction::OptimizationProblemCostFunction(OptimizationPro
 void OptimizationProblemCostFunction::TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters)
 {
 	new_parameters = prev_parameters + step;
+	std::cout << "residual on rest 0: " << step.segment(0, data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "residual on rest 1: " << step.segment(data->x.rows(), data->p.rows()).lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "residual on rest 2: " << step.segment(data->x.rows() + data->p.rows(), data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
 	// new_parameters.segment(data->x.rows(), data->p.rows()) = new_parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(cut_lower_bound);
 }
 

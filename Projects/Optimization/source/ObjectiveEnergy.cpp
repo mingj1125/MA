@@ -1,6 +1,6 @@
 #include "../include/ObjectiveEnergy.h"
 
-AScalar WEIGHTS = 1e-10;
+AScalar WEIGHTS = 1e-11;
 
 AScalar ApproximateTargetStiffnessTensor::ComputeEnergy(Scene* scene){
 
@@ -179,7 +179,7 @@ AScalar ApproximateStiffnessTensorRelationship::ComputeEnergy(Scene* scene){
         r = sample_Cs_info[k].C_entry(3) - 2*sample_Cs_info[k].C_entry(1);
         energy += 0.5*r*r;
     }
-    energy *= WEIGHTS;    
+    energy *= WEIGHTS / target_locations.size();    
     return energy;
 }
 
@@ -225,7 +225,7 @@ VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdx(Scene* scene){
         }
     }
     
-    VectorXa dfdx = gradient_wrt_x*WEIGHTS;
+    VectorXa dfdx = gradient_wrt_x*WEIGHTS/target_locations.size();
 
     
 
@@ -246,7 +246,7 @@ VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdp(Scene* scene){
             g += (sample_Cs_info[k].C_entry(3) -  2*sample_Cs_info[k].C_entry(1))*sample_Cs_info[k].C_diff_p[i](3);
             g += (sample_Cs_info[k].C_entry(3) -  2*sample_Cs_info[k].C_entry(1))*(-2)*sample_Cs_info[k].C_diff_p[i](1);
   
-            gradient_wrt_thickness(i) += g*WEIGHTS;
+            gradient_wrt_thickness(i) += g*WEIGHTS/target_locations.size();
         }
     }
 
@@ -278,7 +278,7 @@ Eigen::SparseMatrix<AScalar> ApproximateStiffnessTensorRelationship::Compute_d2f
         }
     }
     Eigen::SparseMatrix<AScalar> d = drdx;
-    Eigen::SparseMatrix<AScalar> d2fdx2 = WEIGHTS*(d * d.transpose()).pruned();
+    Eigen::SparseMatrix<AScalar> d2fdx2 = WEIGHTS/target_locations.size()*(d * d.transpose()).pruned();
 
     d2fdx2.makeCompressed();
     return d2fdx2;
@@ -318,7 +318,7 @@ Eigen::SparseMatrix<AScalar> ApproximateStiffnessTensorRelationship::Compute_d2f
             drdp.coeffRef(i, 0) += g;
         }
     }
-    Eigen::SparseMatrix<AScalar> d2fdxp = WEIGHTS*(drdp *drdx.transpose()).pruned();
+    Eigen::SparseMatrix<AScalar> d2fdxp = WEIGHTS/target_locations.size()*(drdp *drdx.transpose()).pruned();
     d2fdxp.makeCompressed();
     return d2fdxp;
 }
@@ -338,7 +338,7 @@ Eigen::SparseMatrix<AScalar> ApproximateStiffnessTensorRelationship::Compute_d2f
             drdp.coeffRef(i, 0) += g;
         }
     }
-    Eigen::SparseMatrix<AScalar> d2fdp2 = WEIGHTS*(drdp * drdp.transpose()).pruned();
+    Eigen::SparseMatrix<AScalar> d2fdp2 = WEIGHTS/target_locations.size()*(drdp * drdp.transpose()).pruned();
 
     d2fdp2.makeCompressed();
     return d2fdp2;

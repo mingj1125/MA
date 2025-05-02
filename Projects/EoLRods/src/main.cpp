@@ -28,6 +28,7 @@ int main()
     //     double angle = i*2*M_PI/num_directions; 
     //     directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     // }
+
     // std::vector<double> rods_radius;
     // std::string filename = "../../../Projects/EoLRods/optimization_output/"+mesh_name+"_radii.dat";
     // std::ifstream in_file(filename);
@@ -65,15 +66,15 @@ int main()
     // locations.push_back({-0.6, 0.56, 0});
     // locations.push_back({-0.32, 0.4, 0});
 
-    // scene.findBestCTensorviaProbing(locations, directions, true); 
+    // scene.findBestCTensorviaProbing(locations, directions); 
 
     // scene.optimizeForThickness({0.4, 0.53, 0}, {3.1e5, 8e4, 1.5e4, 4e5, 4e4, 2e5}, "../../../Projects/EoLRods/optimization_output/" + mesh_name);
 
     std::vector<Vector<T, 6>> Cs;
     
-    // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
-    // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
-    // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
+    Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
+    Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
+    Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
     // Cs.push_back({919546,  380372, 310.317,  919546, 310.317,  757525});
     // Cs.push_back({936408,  390733, 5111.18,  910424, 2643.15,  781467});
     // Cs.push_back({919549,   380374, -285.445,   919549, -285.443,   757544});
@@ -94,13 +95,13 @@ int main()
 
     // scene.optimizeForThicknessDistribution(locations, Cs, "../../../Projects/EoLRods/optimization_output/" + mesh_name, "../../../Projects/EoLRods/optimization_output/" + mesh_name + "_radii_graded_h_penalize.dat");
 
-    // scene.finiteDifferenceEstimation({-0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
+    // scene.finiteDifferenceEstimation({-0.5,  0.56, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
 
-    OptimizationProblem p(&scene, "../../../Projects/EoLRods/optimization_output/" + mesh_name);//, "../../../Projects/EoLRods/optimization_output/" + mesh_name + "_radii_debug.dat");
-    // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(locations, Cs);
-    std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(locations);
-    p.objective_energies.push_back(e);
-    if(!p.Optimize()) std::cout << "\n Gradient very large \n";
+    // OptimizationProblem p(&scene, "../../../Projects/EoLRods/optimization_output/" + mesh_name);//, "../../../Projects/EoLRods/optimization_output/" + mesh_name + "_radii_debug.dat");
+    // // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(locations, Cs);
+    // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(locations);
+    // p.objective_energies.push_back(e);
+    // if(!p.Optimize()) std::cout << "\n Gradient very large \n";
 
     return 0;
 }

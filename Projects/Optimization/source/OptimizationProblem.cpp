@@ -47,7 +47,7 @@ bool OptimizationProblem::Optimize()
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 1e-4;
+	options.damping = 1e-3;
 	options.global_stopping_criteria = 1e-2;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;

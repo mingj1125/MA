@@ -519,7 +519,7 @@ damped_newton_result DampedNewtonSolver::Solve()
                 if(g_norm <= options.global_stopping_criteria)
                     found = true;
 
-                //mu = mu*std::max(1.0/3.0,1.0-abs(std::pow((2.0*gamma-1.0),3)));
+                // mu = mu*std::max(1.0/30.0,1.0-abs(std::pow((2.0*gamma-1.0),3)));
                 mu = mu*std::max(AScalar(1.0/3.0),1.0-pow((2.0*gamma-1.0),3));
                 //mu = 1e-6;
                 // if(options.accept_everything)

@@ -46,6 +46,7 @@ public:
 	Eigen::SparseMatrix<AScalar> dcdp;
 	VectorXa dfdx;
 	VectorXa dfdp;
+	VectorXa mark;
 
 	AScalar damping = 100;
 

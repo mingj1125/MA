@@ -1969,6 +1969,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
     sim.add_pbc_bending = false;
     sim.add_pbc_twisting = false;
     sim.add_pbc = false;
+    // sim.add_rigid_joint = false;
 
     sim.add_contact_penalty=false;
     sim.new_frame_work = false;
@@ -1999,6 +2000,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
         TV node_pos = V.row(i); 
         addCrossingPoint(nodal_positions, node_pos, full_dof_cnt, node_cnt);
     }
+    // std::cout << "After adding crossing: " << node_cnt << " nodes, " << full_dof_cnt << " nodes in total \n";
 
     for(auto edge: edges){
         TV node1 = V.row(edge.u_);
@@ -2014,6 +2016,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
         addCrossingData(edge.u_, rod_cnt - 1, 0);
         addCrossingData(edge.v_, rod_cnt - 1, sim.Rods[rod_cnt - 1]->numSeg());
     }
+    // std::cout << "After adding rod: " << rod_cnt << " rods, " << full_dof_cnt << " dof in total \n";
 
     for (auto& rod : sim.Rods)
         rod->fixed_by_crossing = std::vector<bool>(rod->dof_node_location.size(), true);
@@ -2086,7 +2089,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
     auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
         const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {
-        // mask = Vector<bool, 3>(true, false, true);
+        // mask = Vector<bool, 3>(false, true, true);
         mask = Vector<bool, 3>(true, true, true);
         delta = shear_x_down;
         if (x[1] < bottom_left[1] + rec_width)
@@ -2097,7 +2100,7 @@ void Scene::buildFEMRodScene(const std::string& filename, int sub_div, bool bc_d
     auto rec4 = [bottom_left, top_right, shear_x_up, rec_width](
         const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
     {   
-        // mask = Vector<bool, 3>(true, false, true);
+        // mask = Vector<bool, 3>(false, true, true);
         mask = Vector<bool, 3>(true, true, true);
         delta = shear_x_up;
 
@@ -2402,6 +2405,7 @@ void Scene::addAStraightRod(const TV& from, const TV& to,
     for (int i = 0; i < points_on_curve.size(); i++)
     {
         offset_map[node_cnt] = Offset::Zero();
+        std::cout << "Point on cureve\n";
         //push Lagrangian DoF    
         deformed_states.template segment<3>(full_dof_cnt) = points_on_curve[i];
         for (int d = 0; d < 3; d++)

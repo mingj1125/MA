@@ -1,6 +1,7 @@
 #include "../include/EoLRodSim.h"
 #include "../include/Scene.h"
 #include <fstream>
+#include <Eigen/CholmodSupport>
 
 Matrix<T, 3, 3> EoLRodSim::computeGreenLagrangianStrain(const TV sample_loc, const std::vector<TV> line_directions){
     TM F = computeWeightedDeformationGradient(sample_loc, line_directions);
@@ -217,11 +218,6 @@ void Scene::findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::ve
     int c = 2*num_test;
     std::vector<stress_strain_relationship> samples(sample_locs.size(), stress_strain_relationship(sim.Rods.size(), c, sim.deformed_states.rows()));
     sample_Cs_info = std::vector<C_info>(sample_locs.size()); 
-    // Eigen::MatrixXd n(3, c);
-    // Eigen::MatrixXd t(3, c);
-    // std::vector<Eigen::MatrixXd> t_diff(sim.Rods.size(), Eigen::MatrixXd(3,c));
-    // std::vector<Eigen::MatrixXd> n_diff_x(sim.deformed_states.rows(), Eigen::MatrixXd(3,c));
-    // std::vector<Eigen::MatrixXd> t_diff_x(sim.deformed_states.rows(), Eigen::MatrixXd(3,c));
     for(int i = 1; i <= num_test; ++i){
         EoLRodSim sim1;
         sim = sim1;
@@ -302,22 +298,22 @@ void Scene::findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::ve
 
         TV shear_x_down = TV(0.0, 0.0, 0.0) * sim.unit;
         TV shear_x_up = TV(0.001*(i%2), 0.001*(i-1), 0) * sim.unit;
-        auto rec3 = [bottom_left, top_right, shear_x_down, rec_width](
+        auto rec3 = [bottom_left, top_right, shear_x_down, rec_width, i](
             const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
         {
-            // mask = Vector<bool, 3>(true, false, true);
-            mask = Vector<bool, 3>(true, true, true);
+            if(i == 2) mask = Vector<bool, 3>(false, true, true);
+            else mask = Vector<bool, 3>(true, true, true);
             delta = shear_x_down;
             if (x[1] < bottom_left[1] + rec_width)
                 return true;
             return false;
         };
 
-        auto rec4 = [bottom_left, top_right, shear_x_up, rec_width](
+        auto rec4 = [bottom_left, top_right, shear_x_up, rec_width, i](
             const TV& x, TV& delta, Vector<bool, 3>& mask)->bool
         {   
-            // mask = Vector<bool, 3>(true, false, true);
-            mask = Vector<bool, 3>(true, true, true);
+            if(i == 2) mask = Vector<bool, 3>(false, true, true);
+            else mask = Vector<bool, 3>(true, true, true);
             delta = shear_x_up;
 
             if (x[1] > top_right[1] - rec_width)
@@ -332,6 +328,7 @@ void Scene::findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::ve
         do{
             finished = sim.advanceOneStep(static_solve_step++);
         } while (!finished);
+        sim.buildSystemDoFMatrix(equilibrium_K);
 
         for(int l = 0; l < sample_locs.size(); ++l){
             Matrix<T, 3, 3> E = sim.computeGreenLagrangianStrain(sample_locs[l], line_directions);
@@ -656,7 +653,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
         double angle = i*2*M_PI/num_directions; 
         directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
     }
-    const double rod_size = 8e-3;
+    const double rod_size = 1e-2;
     if(rods_radii.rows() == 0){
         rods_radii.resize(sim.Rods.size());
         rods_radii.setConstant(rod_size);
@@ -686,7 +683,10 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
         gradient_wrt_x(i) = g;
     }
     VectorXT total_gradient_wrt_thickness(sim.Rods.size()); total_gradient_wrt_thickness.setZero();
-    total_gradient_wrt_thickness = gradient_wrt_thickness + sim.solveAdjointForOptimization(gradient_wrt_x);
+    StiffnessMatrix K; buildSimulationHessian(K);
+    StiffnessMatrix fd_thickness; sim.buildForceGradientWrtThicknessMatrix(fd_thickness);
+    total_gradient_wrt_thickness = gradient_wrt_thickness -fd_thickness.transpose()*solveForAdjoint(K, sim.W.transpose()*gradient_wrt_x);
+    // std::cout << gradient_wrt_thickness.norm() << "  " << total_gradient_wrt_thickness.norm() << " " << sim.solveAdjointForOptimization(gradient_wrt_x).norm() << std::endl;
     T obj_init = 0;
     for(int j = 0; j < 1; ++j){
         obj_init += (C_entry(j) - stiffness_tensor(j))/std::abs(stiffness_tensor(j))/std::abs(stiffness_tensor(j))*(C_entry(j) - stiffness_tensor(j));
@@ -697,7 +697,7 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
     VectorXT errors(test_size); 
     for(int i = 0; i < test_size; ++i){
 
-        T obj_1 = obj_init + (gradient_wrt_thickness).transpose() * (delta_h/std::pow(2, i));
+        T obj_1 = obj_init + (total_gradient_wrt_thickness).transpose() * (delta_h/std::pow(2, i));
         rods_radii = rods_radii_save;
         rods_radii += delta_h/std::pow(2, i);
         rods_radii = rods_radii.cwiseMax(minVal);
@@ -717,23 +717,74 @@ void Scene::finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffnes
 }
 
 Matrix<T, Eigen::Dynamic, 1> Scene::solveForAdjoint(StiffnessMatrix& K, VectorXT rhs){
-    VectorXT ddq(sim.W.cols());
-    ddq.setZero();
+    VectorXT du(sim.W.cols());
+    du.setZero();
+    VectorXT residual = rhs;
 
     // StiffnessMatrix K;
     K.setZero();
     sim.buildSystemDoFMatrix(K);
-    bool success = sim.linearSolve(K, rhs, ddq);
-    if (!success){
-        std::cout << "Not succeed in adjoint\n";
-        return VectorXT::Zero(sim.Rods.size());
-    }
-
-    // T norm = ddq.norm();
-    // std::cout << norm << std::endl;
-    StiffnessMatrix fd_thickness;
-    sim.buildForceGradientWrtThicknessMatrix(fd_thickness);
-    VectorXT dxd_thickness = -fd_thickness.transpose() * ddq;
     
-    return dxd_thickness;  
+    bool success = false;
+    // bool success = sim.linearSolve(K, rhs, ddq);
+    // if (!success){
+    //     std::cout << "Not succeed in adjoint\n";
+    //     return VectorXT::Zero(sim.Rods.size());
+    // }
+    Eigen::CholmodSupernodalLLT<StiffnessMatrix, Eigen::Lower> solver;
+    T alpha = 1;
+    StiffnessMatrix H(K.rows(), K.cols());
+    H.setIdentity(); H.diagonal().array() = 1e-11;
+    K += H;
+    solver.analyzePattern(K);
+    auto A = K; 
+    
+    int indefinite_count_reg_cnt = 0, invalid_search_dir_cnt = 0, invalid_residual_cnt = 0;
+    int i = 0;
+    T dot_dx_g = 0.0;
+    for (; i < 50; i++)
+    {   
+        solver.factorize(K);
+        // std::cout << "factorize" << std::endl;
+        if (solver.info() == Eigen::NumericalIssue)
+        {
+            alpha += alpha * 4;
+            K = A+alpha*H;
+            indefinite_count_reg_cnt++;
+            continue;
+        }
+
+        du = solver.solve(residual);
+        
+        dot_dx_g = du.normalized().dot(residual.normalized());
+
+        bool search_dir_correct_sign = dot_dx_g > 1e-6;
+        if (!search_dir_correct_sign)
+        {   
+            invalid_search_dir_cnt++;
+        }
+        
+        bool solve_success = true;
+        // bool solve_success = (K * du - residual).norm() < 1e-4;
+        // bool solve_success = du.norm() < 1e-4; 
+        
+        if (!solve_success)
+            invalid_residual_cnt++;
+        // std::cout << "PD: " << positive_definte << " direction " 
+        //     << search_dir_correct_sign << " solve " << solve_success << std::endl;
+
+        if (search_dir_correct_sign && solve_success)
+        {
+            success = true;
+            std::cout << dot_dx_g << " alpha: " << alpha << " norm: " << du.norm() << std::endl;
+            break;
+        }
+        else
+        {
+            alpha += alpha * 4;
+            K = A+alpha*H;
+        }
+    }
+    if(!success) std::cout << "Something wrong with dcdx solve\n";
+    return du;  
 }

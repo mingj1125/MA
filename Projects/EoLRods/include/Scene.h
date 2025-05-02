@@ -24,8 +24,8 @@ private:
     EoLRodSim& sim;
     std::string mesh_file = "";
     VectorXT& deformed_states = sim.deformed_states;
-    double ROD_A = 3e-4;
-    double ROD_B = 3e-4;
+    double ROD_A = 1e-2;
+    double ROD_B = 1e-2;
 
     std::vector<VectorXT> C_diff_thickness;
     std::vector<VectorXT> C_diff_x;
@@ -56,6 +56,7 @@ public:
     
     };
     std::vector<C_info> sample_Cs_info; 
+    StiffnessMatrix equilibrium_K;
 
     Matrix<T, 3, 3> findBestCTensorviaProbing(TV sample_loc, const std::vector<TV> line_directions, bool opt = false);
     void findBestCTensorviaProbing(std::vector<TV> sample_locs, const std::vector<TV> line_directions, bool opt = false);
@@ -64,7 +65,7 @@ public:
     void finiteDifferenceEstimation(TV target_location, Vector<T, 6> stiffness_tensor);
     int num_rods(){return sim.Rods.size();}
     int num_nodes(){return sim.deformed_states.rows();}
-    void buildSimulationHessian(StiffnessMatrix& K){sim.buildSystemDoFMatrix(K);}
+    void buildSimulationHessian(StiffnessMatrix& K){sim.buildSimulationHessian(K);}
     void buildSimulationdEdxp(StiffnessMatrix& K){sim.buildForceGradientWrtThicknessMatrix(K);}
     StiffnessMatrix simulationW(){return sim.W;};
     VectorXT solveForAdjoint(StiffnessMatrix& K, VectorXT rhs);
