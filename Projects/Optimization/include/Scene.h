@@ -11,8 +11,6 @@ class Scene
 private:
     Simulation& sim;
 
-    VectorXa constraints;
-
     std::string output_dir;
     
 public:
@@ -42,8 +40,10 @@ public:
     int num_directions = 15;
 
     int parameter_dof();
+    int x_dof();
     VectorXa get_undeformed_nodes(){return sim.get_undeformed_nodes();};
     VectorXa get_deformed_nodes(){return sim.get_deformed_nodes();};
+    std::vector<int> get_constraints(){return sim.get_constraint_map();}
     std::vector<std::array<size_t, 2>> get_edges(){return sim.get_edges();};
     void findBestCTensorviaProbing(std::vector<Vector3a> sample_locs, 
             const std::vector<Vector3a> line_directions, bool opt = false);

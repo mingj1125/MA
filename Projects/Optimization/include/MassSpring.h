@@ -56,19 +56,21 @@ class MassSpring : public Simulation {
     EvaluationInfo eval_info_of_sample; // not using a vector for samples since have to do sample eval one by one anyways
 
     virtual void initializeScene(const std::string& filename);
+    virtual VectorXa get_initial_parameter(){return spring_widths;}
     virtual VectorXa get_undeformed_nodes(){return rest_states;}
     virtual VectorXa get_deformed_nodes(){return deformed_states;}
+    virtual std::vector<int> get_constraint_map(){return fixed_vertices;}
     virtual std::vector<std::array<size_t, 2>> get_edges();
     virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
-    virtual void setOptimizationParameter(const VectorXa& parameters){
+    virtual void setOptimizationParameter(VectorXa parameters){
         spring_widths = parameters;
         for(auto spring: springs){
             spring->set_width(spring_widths(spring->spring_id));
         }
     }
-    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
-    virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){}
+    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
+    virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void ApplyBoundaryStretch(int i);
     virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_spring_thickness;}
     virtual MatrixXa getStressGradientWrtx(){return eval_info_of_sample.stress_gradients_wrt_x;}
@@ -86,10 +88,10 @@ class MassSpring : public Simulation {
 
     // Native function for evaluation
     Vector3a computeWeightedStress(const Vector3a sample_loc, const Vector3a direction, 
-        std::vector<Vector3a>& gradients_wrt_thickness, std::vector<Vector3a>& gradients_wrt_nodes, bool diff = false);
+        std::vector<Vector3a>& gradients_wrt_thickness, std::vector<Vector3a>& gradients_wrt_nodes);
     bool lineCutRodinSegment(Spring* spring, Vector3a sample_loc, Vector3a direction, AScalar& cut_point_barys);
     Vector3a integrateOverCrossSection(Spring* spring, const Vector3a normal, const AScalar center_line_distance_to_sample, 
-        Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes, bool diff);
+        Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes);
     Eigen::Matrix<AScalar, 18, 3> SGradientWrtx(Spring* spring, Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj);
     AScalar integrateKernelOverDomain(const Vector3a sample_loc, const Vector3a line_direction);
     Matrix3a computeWeightedDeformationGradient(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
@@ -113,7 +115,7 @@ class MassSpring : public Simulation {
                 new_parameters = prev_parameters + step;
             };
 
-    virtual damped_newton_result Simulate();
+    virtual damped_newton_result Simulate(bool use_log = true);
 
 };
 

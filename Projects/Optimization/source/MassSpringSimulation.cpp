@@ -5,21 +5,24 @@
 #include <iostream>
 #include <Eigen/Eigen>
 
-std::vector<Eigen::Triplet<AScalar>> SparseMatrixToTriplets(const Eigen::SparseMatrix<AScalar>& A)
-{
-	std::vector<Eigen::Triplet<AScalar> > triplets;
+// std::vector<Eigen::Triplet<AScalar>> SparseMatrixToTriplets(const Eigen::SparseMatrix<AScalar>& A)
+// {
+// 	std::vector<Eigen::Triplet<AScalar> > triplets;
 
-	for (int k=0; k < A.outerSize(); ++k)
-        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(A,k); it; ++it)
-        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
+// 	for (int k=0; k < A.outerSize(); ++k)
+//         for (Eigen::SparseMatrix<AScalar>::InnerIterator it(A,k); it; ++it)
+//         	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
 
-    return triplets;
-}
+//     return triplets;
+// }
 
 Eigen::SparseMatrix<AScalar> EnforceSquareMatrixConstraints(Eigen::SparseMatrix<AScalar>& old, std::vector<int>& constraints, bool fill_ones = false)
 {
 
-	std::vector<Eigen::Triplet<AScalar>> triplets = SparseMatrixToTriplets(old);
+	std::vector<Eigen::Triplet<AScalar>> triplets;// = SparseMatrixToTriplets(old);
+    for (int k=0; k < old.outerSize(); ++k)
+        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(old,k); it; ++it)
+        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
 
 	std::vector<Eigen::Triplet<AScalar>> new_triplets;
 
@@ -154,14 +157,14 @@ void MassSpring::ApplyBoundaryStretch(int i){
 
     switch (i)
     {
-    case 1:
-        stretchX(1.01);
+    case 3:
+        stretchX(1.1);
         break;
     case 2:    
-        stretchY(1.01);
+        stretchY(1.1);
         break;
-    case 3:
-        stretchDiagonal(1.011); 
+    case 1:
+        stretchDiagonal(1.1); 
         break;   
     default:
         break;
@@ -232,7 +235,7 @@ void MassSpring::stretchDiagonal(AScalar strain){
             fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
         }
-        else if(X(0) > 1.0 - tol && X(1) > 1.0 - tol) {
+        else if(X(0) > 1.0 - tol && X(1) < tol || X(1) > 1.0 - tol && X(0) < tol || X(0) > 1.0 - tol && X(1) > 1.0 - tol) {
             fixed_vertices.push_back(i*3);
             fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
@@ -243,7 +246,7 @@ void MassSpring::stretchDiagonal(AScalar strain){
     }
 }
 
-damped_newton_result MassSpring::Simulate()
+damped_newton_result MassSpring::Simulate(bool use_log)
 {
 	Eigen::SparseMatrix<AScalar> damp_matrix(n_nodes*3, n_nodes*3);
     for(int i=0; i<n_nodes*3 ; ++i)
@@ -263,6 +266,7 @@ damped_newton_result MassSpring::Simulate()
     options.woodbury = false;
     options.sherman_morrison = false;
     options.simplified = false;
+    options.use_log = use_log;
 
     DampedNewtonSolver solver;
     solver.SetParameters(parameters);
@@ -378,7 +382,10 @@ cost_evaluation MassSpringCostFunction::Evaluate(const VectorXa& parameters)
     for(int i=0; i<constraints.size(); ++i)
     	gradient[constraints[i]] = 0.0;
 
-    std::vector<Eigen::Triplet<AScalar>> triplets = SparseMatrixToTriplets(hessian);
+    std::vector<Eigen::Triplet<AScalar>> triplets; // = SparseMatrixToTriplets(hessian);
+    for (int k=0; k < hessian.outerSize(); ++k)
+        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(hessian,k); it; ++it)
+        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
 
     for(int i=0; i<triplets.size(); ++i)
     {
@@ -417,4 +424,79 @@ void MassSpringCostFunction::Finalize(const VectorXa& parameters)
 {
     if(is_xdef)
       data->deformed_states = parameters;
+}
+
+void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
+    int n_params = n_nodes*3;
+
+	K.resize(n_params, n_params);
+    K.setZero();
+
+    stretchX(1.001); Simulate(false);
+
+    std::vector<Eigen::Triplet<AScalar>> triplets;
+    for(auto spring: springs){
+        Vector3a xi, xj, Xi, Xj;
+        xi = deformed_states.segment(spring->p1*3, 3);
+        xj = deformed_states.segment(spring->p2*3, 3);
+        Xi = rest_states.segment(spring->p1*3, 3);
+        Xj = rest_states.segment(spring->p2*3, 3);
+        std::vector<int> offsets = {spring->p1*3, spring->p2*3};
+
+        Matrix12a J;
+        computeStretchingEnergyHessian(spring->k_s(), Xi, Xj, xi, xj, J);
+
+        for(int k = 0; k < 2; k++)
+                for(int l = 0; l < 2; l++)
+                    for(int i = 0; i < 3; i++)
+                        for (int j = 0; j < 3; j++){
+                            triplets.emplace_back(offsets[k]+i, offsets[l]+j, J(k*3 + i, l * 3 + j));
+                        }
+    }
+    K.setFromTriplets(triplets.begin(), triplets.end());
+
+    std::vector<Eigen::Triplet<AScalar>> triplets_k; // = SparseMatrixToTriplets(hessian);
+    for (int k=0; k < K.outerSize(); ++k)
+        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(K,k); it; ++it)
+        	triplets_k.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
+
+    for(int i=0; i<triplets_k.size(); ++i)
+    {
+    	if(std::isnan(triplets_k[i].value()))
+        {
+            std::cout << triplets_k[i].row() << " " << triplets_k[i].col() << " is nan" << std::endl;
+    		throw std::exception();
+        }
+    }
+
+    K = EnforceSquareMatrixConstraints(K, fixed_vertices, true);
+}
+
+void MassSpring::build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){
+
+	K.resize(n_nodes*3, spring_widths.rows());
+    std::vector<Eigen::Triplet<AScalar>> triplets;
+
+    for(auto spring: springs){
+        Vector3a xi, xj, Xi, Xj;
+        xi = deformed_states.segment(spring->p1*3, 3);
+        xj = deformed_states.segment(spring->p2*3, 3);
+        Xi = rest_states.segment(spring->p1*3, 3);
+        Xj = rest_states.segment(spring->p2*3, 3);
+
+        Vector12a F;
+        F.setZero();
+        computeStretchingEnergyGradient(spring->k_s(), Xi, Xj, xi, xj, F);
+        F /= spring->width;
+
+        std::vector<bool> constrained(deformed_states.rows(), false);
+	    for(int i=0; i<fixed_vertices.size(); ++i) constrained[fixed_vertices[i]] = true;
+        for(int i = 0; i < 3; ++i){
+            if(!constrained[spring->p1*3+i])
+                triplets.emplace_back(spring->p1*3+i, spring->spring_id, F(i));
+            if(!constrained[spring->p2*3+i])    
+                triplets.emplace_back(spring->p2*3+i, spring->spring_id, F(3+i));
+        }
+    }
+    K.setFromTriplets(triplets.begin(), triplets.end());
 }

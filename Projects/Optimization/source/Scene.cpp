@@ -3,10 +3,15 @@
 void Scene::buildSceneFromMesh(const std::string& filename){
     mesh_file = filename;
     sim.initializeScene(filename);
+    parameters = sim.get_initial_parameter();
 }
 
 int Scene::parameter_dof(){
     return parameters.rows();
+}
+
+int Scene::x_dof(){
+    return sim.get_deformed_nodes().rows();
 }
 
 Matrix3a Scene::returnApproxStressInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){
@@ -45,7 +50,7 @@ void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs,
         if(opt){
             sim.setOptimizationParameter(parameters);
         }
-        sim.Simulate();
+        sim.Simulate(false);
 
         for(int l = 0; l < sample_locs.size(); ++l){
             Matrix3a E = sim.findBestStrainTensorviaProbing(sample_locs[l], line_directions);
@@ -100,6 +105,6 @@ void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs,
             sample_Cs_info[l].C_diff_x[i] =  (A.transpose()*A).ldlt().solve(A_diff_x[i].transpose()*b+A.transpose()*b_diff_x[i]-(A_diff_x[i].transpose()*A+A.transpose()*A_diff_x[i])*sample_Cs_info[l].C_entry);
         }  
     }
-    // for(int l = 0; l < sample_locs.size(); ++l)
-    //     std::cout << "C: " << sample_Cs_info[l].C_entry.transpose() << std::endl;
+    for(int l = 0; l < sample_locs.size(); ++l)
+        std::cout << "C: " << sample_Cs_info[l].C_entry.transpose() << std::endl;
 }

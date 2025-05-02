@@ -371,7 +371,7 @@ damped_newton_result DampedNewtonSolver::Solve()
 
         AScalar h_norm = h.lpNorm<Eigen::Infinity>(); AScalar x_norm = parameters.lpNorm<Eigen::Infinity>();
 
-        if(h_norm <= options.change_stopping_criteria)
+        if(h_norm <= options.change_stopping_criteria && options.use_log)
         {
             std::cout << k << " iteration change was " << h_norm << " stopping criteria was " << options.change_stopping_criteria*(x_norm+options.change_stopping_criteria) << std::endl;
             --result.n_iterations;
@@ -519,7 +519,7 @@ damped_newton_result DampedNewtonSolver::Solve()
                 nu = 2.0*nu;
             }
 
-            if(!options.check_matrix)
+            if(!options.check_matrix && options.use_log)
                 std::cout << std::endl;
             else {
                 if (J_new.cols() == J_new.rows()) {

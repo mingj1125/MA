@@ -46,7 +46,7 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
         std::vector<Vector3a> gradient_t_di(springs.size(), Vector3a::Zero());
         std::vector<Vector3a> gradient_t_wrt_x_di(deformed_states.rows(), Vector3a::Zero());
 
-        t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, gradient_t_wrt_x_di, true);
+        t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, gradient_t_wrt_x_di);
         n.col(i) = direction_normal;
         for(int j = 0; j < gradient_t.size(); ++j){
             gradient_t[j].col(i) = gradient_t_di[j];
@@ -96,7 +96,7 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
 }
 
 Vector3a MassSpring::computeWeightedStress(const Vector3a sample_loc, const Vector3a direction, 
-    std::vector<Vector3a>& gradients_wrt_parameter, std::vector<Vector3a>& gradients_wrt_nodes, bool diff){
+    std::vector<Vector3a>& gradients_wrt_parameter, std::vector<Vector3a>& gradients_wrt_nodes){
 
     Vector3a stress = Vector3a::Zero();
     bool cut = false;
@@ -126,7 +126,7 @@ Vector3a MassSpring::computeWeightedStress(const Vector3a sample_loc, const Vect
 
             Vector3a stress_cross_section; 
             // stress over cross section area
-            stress_cross_section = integrateOverCrossSection(spring, normal, distance, gradients_wrt_parameter[spring->spring_id], gradients_wrt_nodes, diff);
+            stress_cross_section = integrateOverCrossSection(spring, normal, distance, gradients_wrt_parameter[spring->spring_id], gradients_wrt_nodes);
             stress += stress_cross_section;
 
         }
@@ -167,7 +167,7 @@ bool MassSpring::lineCutRodinSegment(Spring* spring, Vector3a sample_loc, Vector
 
 // Function to integrate over a single ellipse
 Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a normal, const AScalar center_line_distance_to_sample, 
-    Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes, bool diff){
+    Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes){
 
     Vector3a integral = {0.0, 0.0, 0.0};
     Eigen::Vector<AScalar, 18> integral_diff_traction; integral_diff_traction.setZero();
@@ -194,13 +194,11 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
         AScalar kernel = gaussian_kernel(center_line_distance_to_sample+x);
 
         integral += kernel * f_val;
-        if(diff) gradient_wrt_thickness += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
+        gradient_wrt_thickness += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
         weights += kernel;
 
-        if(diff){
         Eigen::Matrix<AScalar, 18, 1> diff_traction = SGradientWrtx(spring, xi, xj, Xi, Xj) *normal;
         integral_diff_traction += kernel * diff_traction;
-        }
     }
 
     integral *= 2.0 * b / n;
