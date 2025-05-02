@@ -27,7 +27,11 @@ private:
     Eigen::MatrixXd meshV;
     Eigen::MatrixXd meshV_deformed;
     Eigen::MatrixXi meshF;
+
     Scene* scene;
+    bool optimized = false;
+    int stretch_type = 1;
+    float C_test_point[2] = {0.5, 0.5};
 
 public:
     Visualization(Scene* scene_i): scene(scene_i){}

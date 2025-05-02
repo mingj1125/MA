@@ -142,19 +142,27 @@ void MassSpring::computeBoundingBox(Vector3a& top_right, Vector3a& bottom_left){
 
 }
 
-void MassSpring::ApplyBoundaryStretch(int i){
+void MassSpring::applyBoundaryStretch(int i, AScalar strain){
 
+    AScalar strain_apply = 1.1;
+    if(strain > 0.) strain_apply = strain;
     switch (i)
     {
     case 3:
-        stretchX(1.1);
+        stretchX(strain_apply);
         break;
     case 2:    
-        stretchY(1.1);
+        stretchY(strain_apply);
         break;
     case 1:
-        stretchDiagonal(1.1); 
+        stretchDiagonal(strain_apply); 
         break;   
+    case 4:
+        stretchSlidingY(strain_apply);
+        break;    
+    case 5:
+        stretchSlidingX(strain_apply);
+        break;        
     default:
         break;
     }
@@ -212,6 +220,50 @@ void MassSpring::stretchY(AScalar strain){
     }
 }
 
+void MassSpring::stretchSlidingY(AScalar strain){
+
+    resetSimulation();
+    AScalar tol = 1e-9;
+
+    for(int i = 0; i < n_nodes; ++i){
+        Vector3a X = rest_states.segment(3*i, 3);
+        if(X(1) < tol) {
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1, 0) = X(1,0)*strain;
+        }
+        else if(X(1) > 1.0 - tol) {
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1, 0) = X(1,0)*strain;
+        }
+    }
+}
+
+void MassSpring::stretchSlidingX(AScalar strain){
+
+    resetSimulation();
+    AScalar tol = 1e-9;
+
+    for(int i = 0; i < n_nodes; ++i){
+        Vector3a X = rest_states.segment(3*i, 3);
+        if(X(0) < tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i, 0) = X(0,0)*strain;
+        }
+        else if(X(0) > 1.0 - tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i, 0) = X(0,0)*strain;
+        }
+    }
+}
+
 void MassSpring::stretchDiagonal(AScalar strain){
 
     resetSimulation();
@@ -229,7 +281,7 @@ void MassSpring::stretchDiagonal(AScalar strain){
             fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
-            deformed_states(3*i+1, 0) = X(1,0)*strain + 0.01;
+            deformed_states(3*i+1, 0) = X(1,0)*strain + 0.001;
             deformed_states(3*i, 0) = X(0,0)*strain;
         }
     }
@@ -421,7 +473,7 @@ void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
 	K.resize(n_params, n_params);
     K.setZero();
 
-    stretchX(1.001); Simulate(false);
+    stretchX(1.0005); Simulate(false);
 
     std::vector<Eigen::Triplet<AScalar>> triplets;
     for(auto spring: springs){

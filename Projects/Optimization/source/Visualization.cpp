@@ -132,7 +132,47 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain xy", strain_xy);
         probes->addScalarQuantity("strain yy", strain_yy);
     }
+    // if(ImGui::InputInt("Stretch type", &stretch_type)){}
+    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("Stretch type", &stretch_type)) 
+    {
+        if(optimized){
+            VectorXa mesh_radii(scene->parameter_dof());
+            std::string filename = "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_radii.dat";
+            std::ifstream in_file(filename);
+            if (!in_file) {
+                std::cerr << "Error opening file for reading: " << filename << std::endl;
+            }
+        
+            AScalar a; int cnt = 0;
+            while (in_file >> a) {
+                mesh_radii(cnt) = a;
+                ++cnt;
+            }
+            scene->parameters = mesh_radii;
+
+            rod_network->addEdgeScalarQuantity("rod radii", mesh_radii);
+            scene->simulateWithParameter(mesh_radii, stretch_type);
+        }  else {
+            VectorXa mesh_radii(scene->parameter_dof()); mesh_radii.setConstant(1e-2);
+            scene->parameters = mesh_radii;
+            scene->simulateWithParameter(mesh_radii, stretch_type);
+        }
+
+    } 
+    if(ImGui::InputFloat2("Point for C: ", C_test_point)){}
+    if(ImGui::Button("Calculate C")){
+        Vector3a s = {C_test_point[0], C_test_point[1], 0.0};
+        std::vector<Vector3a> directions;
+        for(int i = 0; i < scene->num_directions; ++i) {
+            AScalar angle = i*2*M_PI/scene->num_directions; 
+            directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
+        }
+        scene->findBestCTensorviaProbing({s}, directions, true);
+    }
+    
 }
+
+// for sample points visualization in deformed configuration
 
 void Visualization::updateCurrentVertex(){
 

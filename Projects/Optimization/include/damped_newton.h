@@ -29,6 +29,8 @@ struct damped_newton_options
 
     int n_constraints = 0;
 
+    std::string output_log = "";
+
     Eigen::SparseMatrix<AScalar> damp_matrix;
 
     damped_newton_solver_type solver_type = DN_SOLVER_LLT;

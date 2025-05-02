@@ -24,7 +24,8 @@ public:
     virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){}
 
-    virtual void ApplyBoundaryStretch(int i){}
+    virtual void applyBoundaryStretch(int i, AScalar strain = 0){}
+    virtual void applySlidingBoundary(bool apply){}
     virtual damped_newton_result Simulate(bool use_log = true){}
 
 };

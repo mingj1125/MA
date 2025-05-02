@@ -41,6 +41,7 @@ class MassSpring : public Simulation {
     std::vector<Spring*> springs;
     VectorXa spring_widths;
     AScalar initial_width = 1e-2;
+    std::vector<int> fixed_vertices;
 
     AScalar kernel_std = 0.08;
 
@@ -71,7 +72,7 @@ class MassSpring : public Simulation {
     }
     virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
-    virtual void ApplyBoundaryStretch(int i);
+    virtual void applyBoundaryStretch(int i, AScalar strain = 0);
     virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_spring_thickness;}
     virtual MatrixXa getStressGradientWrtx(){return eval_info_of_sample.stress_gradients_wrt_x;}
     virtual MatrixXa getStrainGradientWrtx();
@@ -85,6 +86,8 @@ class MassSpring : public Simulation {
     void stretchX(AScalar strain);    
     void stretchY(AScalar strain);
     void stretchDiagonal(AScalar strain);
+    void stretchSlidingY(AScalar strain);
+    void stretchSlidingX(AScalar strain);
 
     // Native function for evaluation
     Vector3a computeWeightedStress(const Vector3a sample_loc, const Vector3a direction, 
@@ -102,7 +105,6 @@ class MassSpring : public Simulation {
     bool use_jacobi = false;
     int max_iterations = 1000;
 
-    std::vector<int> fixed_vertices;
     std::function<bool()> are_parameters_ok = [](){return true;};
 
     std::function<void(VectorXa&)> pre_process = [](VectorXa& parameters){};

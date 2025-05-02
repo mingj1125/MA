@@ -18,10 +18,11 @@ public:
     ~Scene() {}
     
     // ------------------------------- Scene Setup -------------------------------
-    void buildSceneFromMesh(const std::string& filename);
+    void buildSceneFromMesh(const std::string& mesh_name_s);
 
     // ------------------------------- Scene Property -------------------------------
     std::string mesh_file = "";
+    std::string mesh_name;
     VectorXa parameters; 
     struct C_info{
 
@@ -49,6 +50,7 @@ public:
             const std::vector<Vector3a> line_directions, bool opt = false);
     void buildSimulationHessian(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edx2(K);}
     void buildSimulationdEdxp(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edxp(K);}
+    void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type); sim.Simulate();}
     Matrix3a returnApproxStressInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     Matrix3a returnApproxStrainInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
 

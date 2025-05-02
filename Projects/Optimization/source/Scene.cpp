@@ -1,8 +1,9 @@
 #include "../include/Scene.h"
 
-void Scene::buildSceneFromMesh(const std::string& filename){
-    mesh_file = filename;
-    sim.initializeScene(filename);
+void Scene::buildSceneFromMesh(const std::string& mesh_name_s){
+    mesh_file = "../../../Projects/Optimization/data/"+mesh_name_s+".obj";
+    mesh_name = mesh_name_s;
+    sim.initializeScene(mesh_file);
     parameters = sim.get_initial_parameter();
 }
 
@@ -46,7 +47,7 @@ void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs,
     std::vector<stress_strain_relationship> samples(sample_locs.size(), stress_strain_relationship(parameters.rows(), num_test, sim.get_deformed_nodes().rows()));
     sample_Cs_info = std::vector<C_info>(sample_locs.size(), C_info(sim.get_deformed_nodes().rows(), parameter_dof())); 
     for(int i = 1; i <= num_test; ++i){
-        sim.ApplyBoundaryStretch(i);
+        sim.applyBoundaryStretch(i);
         if(opt){
             sim.setOptimizationParameter(parameters);
         }

@@ -30,36 +30,24 @@ bool OptimizationProblem::Optimize()
 	parameters.setZero();
 	parameters.segment(x.rows(), p.rows()) = p;
 
-	// gauss_newton_options options;
-	// options.damping = 100.0;
-	// options.global_stopping_criteria = 1e-3;
-	// options.change_stopping_criteria = 1e-9;
-
-	// GaussNewtonSolver solver;
-	// solver.SetParameters(parameters);
-	// solver.SetCostFunction(&cost_function);
-	// solver.SetOptions(std::move(options));
-	// gauss_newton_result result = solver.Solve();
-
 	Eigen::SparseMatrix<AScalar> damp_matrix(parameters.rows(), parameters.rows());
 	for(int i=0; i<p.rows(); ++i)
 		damp_matrix.coeffRef(x.rows()+i, x.rows()+i) = 1.0;
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 1e-3;
+	options.damping = 1e-4;
 	options.global_stopping_criteria = 1e-2;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
 	options.max_iterations = 300;
-	// options.output_log = output_loc;
+	options.output_log = output_loc;
 
 	DampedNewtonSolver solver;
 	solver.SetParameters(parameters);
 	solver.SetCostFunction(&cost_function);
 	solver.SetOptions(std::move(options));
 	damped_newton_result result = solver.Solve();
-	// solver.GetParameters(parameters);
 
 	// std::cout << result.gradient_vec.segment(x.rows(), p.rows()).transpose() << std::endl;
 	// std::cout << std::endl;
@@ -72,14 +60,14 @@ bool OptimizationProblem::Optimize()
 	// 	std::cout << "Grad " << i << " : " << r.lpNorm<Eigen::Infinity>() << std::endl;
 	// }
 
-	// VectorXa rods_radii = parameters.segment(x.rows(), p.rows());
+	VectorXa rods_radii = scene->parameters;
     // std::cout << rods_radii.transpose() << std::endl; 
-    // std::ofstream out_file(output_loc+"_radii.dat");
-    // if (!out_file) {
-    //     std::cerr << "Error opening file for writing: " << output_loc << std::endl;
-    // }
-    // out_file << rods_radii << "\n";
-    // out_file.close();
+    std::ofstream out_file(output_loc+"_radii.dat");
+    if (!out_file) {
+        std::cerr << "Error opening file for writing: " << output_loc << std::endl;
+    }
+    out_file << rods_radii << "\n";
+    out_file.close();
 
 	return result.gradient < 1e-2;
 }
@@ -97,7 +85,6 @@ OptimizationProblem::OptimizationProblem(Scene* scene_m, std::string out_m, std:
         while (in_file >> a) {
             parameter_from_file.push_back(a);
         }
-        scene->parameters.resize(parameter_from_file.size());
         for(int i = 0; i < parameter_from_file.size(); ++i){
             scene->parameters(i) = parameter_from_file[i];
         }
@@ -132,6 +119,7 @@ void OptimizationProblemCostFunction::UpdateSensitivities(){
 	d2fdp2 = Eigen::SparseMatrix<AScalar>(data->full_p.rows(), data->full_p.rows()); d2fdp2.setZero();
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
+		// Note that this is kinda ugly as Compute_dcdx setup a new simulation for constraints related modification (fixed dof)
 		dcdx += data->objective_energies[i]->Compute_dcdx(data->scene);
 		dcdp += data->objective_energies[i]->Compute_dcdp(data->scene);
 		dfdx += data->objective_energies[i]->Compute_dfdx(data->scene);
