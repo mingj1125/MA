@@ -3,6 +3,7 @@
 #include <Eigen/CholmodSupport>
 #include <Eigen/Eigenvalues>
 #include <fstream>
+#include <iomanip>
 
 std::vector<Eigen::Triplet<AScalar>> SparseMatrixToTriplets(const Eigen::SparseMatrix<AScalar>& A)
 {
@@ -36,7 +37,7 @@ bool OptimizationProblem::Optimize()
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 1e-4;
+	options.damping = 5e-3;
 	options.global_stopping_criteria = 1e-2;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
@@ -49,19 +50,7 @@ bool OptimizationProblem::Optimize()
 	solver.SetOptions(std::move(options));
 	damped_newton_result result = solver.Solve();
 
-	// std::cout << result.gradient_vec.segment(x.rows(), p.rows()).transpose() << std::endl;
-	// std::cout << std::endl;
-	// AScalar Fx; VectorXa r; Eigen::SparseMatrix<AScalar> J;
-	// AScalar step = 1e-11;
-	// for(int i = -10; i < 15; i++){
-	// 	VectorXa test_param = i * step * result.gradient_vec + parameters;
-	// 	std::tie(Fx, r, J) = cost_function.Evaluate(test_param);
-	// 	std::cout << "Step " << i << " : " << Fx << std::endl;
-	// 	std::cout << "Grad " << i << " : " << r.lpNorm<Eigen::Infinity>() << std::endl;
-	// }
-
 	VectorXa rods_radii = scene->parameters;
-    // std::cout << rods_radii.transpose() << std::endl; 
     std::ofstream out_file(output_loc+"_radii.dat");
     if (!out_file) {
         std::cerr << "Error opening file for writing: " << output_loc << std::endl;
@@ -70,6 +59,169 @@ bool OptimizationProblem::Optimize()
     out_file.close();
 
 	return result.gradient < 1e-2;
+}
+
+struct GradientDescentOptions {
+    int max_iterations = 1000;
+    double initial_step_size = 1.0;
+    double tolerance = 1e-3;
+    double alpha = 0.3; // Armijo rule
+    double beta = 0.8;  // backtracking
+};
+
+struct GradientDescentSummary {
+    int num_iterations;
+    bool converged;
+    double final_cost;
+
+    std::string BriefReport() const {
+        return converged ? 
+            "Gradient descent converged." : 
+            "Gradient descent did NOT converge.";
+    }
+};
+
+template <typename CostFunctor>
+GradientDescentSummary GradientDescent(
+    const GradientDescentOptions& options,
+    CostFunctor cost_function,
+    std::vector<double>& x)
+{
+    GradientDescentSummary summary;
+    int n = x.size();
+    std::vector<double> grad(n);
+    std::vector<double> new_grad(n);
+    std::vector<double> x_new(n);
+	std::string output_file = "../../../Projects/Optimization/optimization_output/gradient_descent.log";
+	std::ofstream log(output_file);
+
+    // std::cout << std::fixed << std::setprecision(10);
+    std::cout << " Iter     h_norm         step size         Cost         New_Cost       r_norm     r_new_norm      T_time        Status\n";
+	// log << std::fixed << std::setprecision(10);
+    log << " Iter     h_norm         step size         Cost         New_Cost       r_norm     r_new_norm      T_time        Status\n";
+
+    for (int iter = 1; iter <= options.max_iterations; ++iter) {
+        auto t_start = std::chrono::high_resolution_clock::now();
+
+        double cost = 0.0;
+        cost_function.Evaluate(x.data(), &cost, grad.data());
+
+        double grad_norm = 0.0;
+        for (double g : grad) grad_norm += g * g;
+        grad_norm = std::sqrt(grad_norm);
+
+        if (grad_norm < options.tolerance) {
+            summary.converged = true;
+            summary.num_iterations = iter - 1;
+            summary.final_cost = cost;
+            return summary;
+        }
+
+        // Descent direction
+        std::vector<double> dir(n);
+        for (int i = 0; i < n; ++i)
+            dir[i] = -grad[i];
+
+        double dir_norm = 0.0;
+        for (double d : dir) dir_norm += d * d;
+        dir_norm = std::sqrt(dir_norm);
+
+        // Line search
+        double step = options.initial_step_size;
+        bool accepted = false;
+        double new_cost = cost;
+
+        while (true) {
+            for (int i = 0; i < n; ++i)
+                x_new[i] = x[i] + step * dir[i];
+
+            cost_function.Evaluate(x_new.data(), &new_cost, new_grad.data());
+
+            double dot = 0.0;
+            for (int i = 0; i < n; ++i)
+                dot += grad[i] * (x_new[i] - x[i]);
+
+            if (new_cost <= cost + options.alpha * dot) {
+                accepted = true;
+                break;
+            }
+
+            step *= options.beta;
+            if (step < 1e-12) break;
+        }
+
+        auto t_end = std::chrono::high_resolution_clock::now();
+        double time_sec = std::chrono::duration<double>(t_end - t_start).count();
+
+        // Output logging
+        double new_grad_norm = 0.0;
+        for (double g : new_grad) new_grad_norm += g * g;
+        new_grad_norm = std::sqrt(new_grad_norm);
+
+        std::cout << std::setw(5) << iter << "   "
+                  << std::setw(12) << dir_norm << "   "
+                  << std::setw(12) << step << "   "
+                  << std::setw(10) << cost << "   "
+                  << std::setw(12) << new_cost << "   "
+                  << std::setw(10) << grad_norm << "   "
+                  << std::setw(14) << new_grad_norm << "   "
+                  << "T=" << std::setw(5) /*<< std::setprecision(15)*/ << time_sec << "s   "
+                  << (accepted ? "ACCEPTED" : "REJECTED") << "\n";
+			
+		log << std::setw(5) << iter << "   "
+                  << std::setw(12) << dir_norm << "   "
+                  << std::setw(12) << step << "   "
+                  << std::setw(10) << cost << "   "
+                  << std::setw(12) << new_cost << "   "
+                  << std::setw(10) << grad_norm << "   "
+                  << std::setw(14) << new_grad_norm << "   "
+                  << "T=" << std::setw(5) /*<< std::setprecision(15)*/ << time_sec << "s   "
+                  << (accepted ? "ACCEPTED" : "REJECTED") << "\n";		  
+
+        if (!accepted) {
+            summary.converged = false;
+            summary.num_iterations = iter;
+            summary.final_cost = new_cost;
+            return summary;
+        }
+
+        x = x_new;
+        grad = new_grad;
+    }
+
+    summary.converged = false;
+    summary.num_iterations = options.max_iterations;
+    cost_function.Evaluate(x.data(), &summary.final_cost, grad.data());
+	log.close();
+	return summary;
+}
+
+bool OptimizationProblem::OptimizeLBFGS()
+{
+	if(weights_p.rows() == 0)
+	{
+		weights_p = Eigen::SparseMatrix<AScalar>(p.rows(), p.rows());
+		for(int i=0; i<p.rows(); ++i)
+			weights_p.coeffRef(i,i) = 1.0;
+	}
+
+	std::vector<AScalar> parameters(p.rows());
+	for(int i=0; i<p.rows(); ++i)
+		parameters[i] = p(i);	
+
+
+	OptimizationProblemCostFunctionCeres cost_function(this);
+	GradientDescentOptions options;
+	options.initial_step_size = 1e-3;
+	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
+	std::cout << summary.BriefReport() << "\n";
+	std::string op_result = output_loc + "_gd_radii.dat";
+	std::ofstream out(op_result);
+	for(int i=0; i<p.rows(); ++i)
+		out << parameters[i] << std::endl;
+	out.close();	
+    
+	return true;
 }
 
 OptimizationProblem::OptimizationProblem(Scene* scene_m, std::string out_m, std::string initial_file): scene(scene_m), output_loc(out_m){
@@ -141,7 +293,6 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 	VectorXa dd = solver.solve(dfdx);
 
 	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp-(dcdp.transpose() * dd));
-	std::cout << "Gradient 2-norm: " << gradient.norm() << std::endl;
 
 	return gradient;
 }
@@ -264,6 +415,138 @@ void OptimizationProblemCostFunction::Finalize(const VectorXa& parameters)
 	data->p = parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(data->cut_lower_bound);
 }
 
-void OptimizationProblem::TestSensitivityGradient(){
-	// scene->finiteDifferenceEstimation({-0.4,  0.53, 0}, {634576, 181359, 4336.13, 726504, 40214.4, 380732});
+void OptimizationProblem::TestOptimizationGradient(){
+
+	if(weights_p.rows() == 0)
+	{
+		weights_p = Eigen::SparseMatrix<AScalar>(p.rows(), p.rows());
+		for(int i=0; i<p.rows(); ++i)
+			weights_p.coeffRef(i,i) = 1.0;
+	}
+	VectorXa parameters(x.rows()*2 + p.rows());
+	parameters.setZero();
+
+	OptimizationProblemCostFunction cost_function(this);
+
+	std::cout << std::endl << std::endl;
+	std::cout << "<---------------------------------- TESTING GRADIENT ----------------------------------> " << std::endl;
+	parameters.segment(x.rows(), p.rows()) = p;
+	VectorXa init_p = p;
+	AScalar cost;
+	VectorXa gradient;
+	Eigen::SparseMatrix<AScalar> hessian;
+	std::tie(cost, gradient, hessian) = cost_function.Evaluate(parameters);
+
+	int test_size = 10; 
+    VectorXa errors(test_size); 
+	AScalar step = 0.2;
+    VectorXa delta_h(p.rows()); delta_h.setConstant(step);
+    for(int i = 0; i < test_size; ++i){
+
+        AScalar obj_1 = cost + (gradient.segment(x.rows(), p.rows())).transpose() * (delta_h/std::pow(2, i));
+        parameters.segment(x.rows(), p.rows()) = init_p + delta_h/std::pow(2, i);
+		AScalar cost_fd;
+		VectorXa gradient_fd;
+		Eigen::SparseMatrix<AScalar> hessian_fd;
+        std::tie(cost_fd, gradient_fd, hessian_fd) = cost_function.Evaluate(parameters);
+        
+        errors(i) = std::abs(cost_fd-obj_1);
+    }
+    for(int i = 1; i < test_size; ++i){
+        std::cout <<  step/std::pow(2, i)  << " - " << errors(i-1)/errors(i) << std::endl;
+    }
+}
+
+ceres::CallbackReturnType OptimizationProblemUpdateCallback::operator()(const ceres::IterationSummary& summary)
+{
+	VectorXa params(data->p.rows());
+
+	for(int i=0; i<params.rows(); ++i)
+		params[i] = parameters[i];
+
+	data->on_iteration_accept(params);
+
+	return ceres::SOLVER_CONTINUE;
+}
+
+AScalar OptimizationProblemCostFunctionCeres::ComputeEnergy() const
+{
+	AScalar energy = 0;
+
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		AScalar energy_ele = data->objective_energies[i]->ComputeEnergy(data->scene);
+		// std::cout << "Energy " << i << ": " << energy_ele << std::endl;
+		energy += energy_ele;
+	}
+
+	return energy;
+}
+
+VectorXa OptimizationProblemCostFunctionCeres::ComputeGradient() const
+{	
+	Eigen::SparseMatrix<AScalar> dcdx(data->x.rows(), data->x.rows()); dcdx.setZero();
+	VectorXa dfdx(data->x.rows()); dfdx.setZero();
+	VectorXa dfdp(data->full_p.rows()); dfdp.setZero();
+	Eigen::SparseMatrix<AScalar> dcdp(data->x.rows(), data->full_p.rows()); dcdp.setZero();
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		// Note that this is kinda ugly as Compute_dcdx setup a new simulation for constraints related modification (fixed dof)
+		dcdx += data->objective_energies[i]->Compute_dcdx(data->scene);
+		dcdp += data->objective_energies[i]->Compute_dcdp(data->scene);
+		dfdx += data->objective_energies[i]->Compute_dfdx(data->scene);
+		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene);
+	}
+	VectorXa gradient(data->p.rows()); gradient.setZero();
+	Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar>> solver(dcdx);
+	// Eigen::SelfAdjointEigenSolver<Eigen::MatrixXd> solver_eig(dcdx.toDense());
+	// Eigen::VectorXd eigenvalues = solver_eig.eigenvalues();
+	// std::cout << "eigenvalues: " << eigenvalues.transpose() << std::endl;
+	VectorXa dd = solver.solve(dfdx);
+
+	gradient = (dfdp-(dcdp.transpose() * dd));
+
+	return gradient;
+}
+
+OptimizationProblemCostFunctionCeres::OptimizationProblemCostFunctionCeres(OptimizationProblem* data_m) : data(data_m)
+{
+
+}
+
+bool OptimizationProblemCostFunctionCeres::Evaluate(double* parameters, double* cost, double* gradient) const
+{
+	for(int i=0; i<data->p.rows(); ++i)
+		data->p[i] =  parameters[i];
+	
+	data->full_p = data->weights_p*data->p;
+
+	if(!data->check_if_valid_p(data->full_p))
+		return false;
+
+	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
+	data->scene->parameters = data->full_p;
+	data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		data->objective_energies[i]->SimulateAndCollect(data->scene);
+	}
+	std::cout << "--------------------------------------------------------------------" << std::endl;
+
+	AScalar energy = ComputeEnergy();
+	std::cout << "Computing gradient" << std::endl;
+	VectorXa gradient_e = ComputeGradient();
+	std::cout << "Done" << std::endl;
+
+	*cost = energy;
+
+	for(int i=0; i<gradient_e.rows(); ++i)
+		gradient[i] = gradient_e[i];
+
+	return true;
+}
+
+int OptimizationProblemCostFunctionCeres::NumParameters() const
+{
+	return data->p.rows();
 }

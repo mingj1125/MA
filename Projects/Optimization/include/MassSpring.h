@@ -43,7 +43,7 @@ class MassSpring : public Simulation {
     AScalar initial_width = 1e-2;
     std::vector<int> fixed_vertices;
 
-    AScalar kernel_std = 0.08;
+    AScalar kernel_std = 0.1;
 
     struct EvaluationInfo
     {

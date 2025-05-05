@@ -69,6 +69,7 @@ public:
     // Vector<int, 6> consider_entry; // 1 if considered
     std::vector<Vector3a> target_locations;
     // std::vector<Eigen::Vector3d> directions;
+    AScalar ratio = 2;
 
 
     ApproximateStiffnessTensorRelationship(std::vector<Vector3a> target_locations_m){

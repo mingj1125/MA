@@ -473,7 +473,7 @@ void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
 	K.resize(n_params, n_params);
     K.setZero();
 
-    stretchX(1.0005); Simulate(false);
+    stretchX(1.00001); Simulate(false);
 
     std::vector<Eigen::Triplet<AScalar>> triplets;
     for(auto spring: springs){

@@ -5,6 +5,8 @@
 #include "cost_function.h"
 #include "ObjectiveEnergy.h"
 #include <memory>
+#include <ceres/ceres.h>
+#include <glog/logging.h>
 
 class OptimizationProblem
 {
@@ -29,9 +31,9 @@ public:
     bool Optimize();
     OptimizationProblem(Scene* scene_m, std::string out_m, std::string initial_file="");
 
-	// bool OptimizeLBFGS();
+	bool OptimizeLBFGS();
 
-	void TestSensitivityGradient();
+	void TestOptimizationGradient();
 };
 
 class OptimizationProblemCostFunction : public CostFunction
@@ -64,6 +66,30 @@ public:
 	virtual void TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters);
 
     virtual void Finalize(const VectorXa& parameters);
+};
+
+class OptimizationProblemUpdateCallback : public ceres::IterationCallback
+{
+public:
+	OptimizationProblem* data;
+	double* parameters;
+
+	ceres::CallbackReturnType operator()(const ceres::IterationSummary& summary);
+};
+
+class OptimizationProblemCostFunctionCeres
+{
+public:
+	OptimizationProblem* data;
+
+	AScalar ComputeEnergy() const;
+	VectorXa ComputeGradient() const;
+
+	OptimizationProblemCostFunctionCeres(OptimizationProblem* data_m);
+
+	bool Evaluate(double* parameters, double* cost, double* gradient) const;
+
+	int NumParameters() const;
 };
 
 #endif

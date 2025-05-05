@@ -14,15 +14,18 @@
 
 file(GLOB HEADERS "include/*.h" "autodiff/*.h")
 file(GLOB SOURCES "src/*.cpp" "autodiff/*.cpp")
-find_package(CHOLMOD REQUIRED)
-include_directories(${CHOLMOD_INCLUDES})
+# find_package(CHOLMOD REQUIRED)
+# include_directories(${CHOLMOD_INCLUDES})
 find_package(TBB REQUIRED)
+find_package (SuiteSparse REQUIRED)
 include_directories("/opt/homebrew/Cellar/tbb/2022.0.0/include")
 
 add_executable(EoLRods ${HEADERS} ${SOURCES})
-target_link_libraries(EoLRods ${CHOLMOD_LIBRARIES})
+# target_link_libraries(EoLRods ${CHOLMOD_LIBRARIES})
 target_link_libraries(EoLRods TBB::tbb)
+target_link_libraries(EoLRods ${SuiteSparse_CHOLMOD_LIBRARY})
 
 target_include_directories(EoLRods PUBLIC ../../Libs/spectra/include)
 target_include_directories(EoLRods PUBLIC ../../Deps/libigl/include)
+target_include_directories(EoLRods PUBLIC /opt/homebrew/include/suitesparse)
 target_link_libraries(EoLRods ${DEPS} polyscope)
