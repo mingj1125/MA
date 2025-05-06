@@ -57,7 +57,7 @@ class MassSpring : public Simulation {
     EvaluationInfo eval_info_of_sample; // not using a vector for samples since have to do sample eval one by one anyways
 
     virtual void initializeScene(const std::string& filename);
-    virtual VectorXa get_initial_parameter(){return spring_widths;}
+    virtual VectorXa get_initial_parameter(){VectorXa p(springs.size()); p.setConstant(initial_width); return p;}
     virtual VectorXa get_undeformed_nodes(){return rest_states;}
     virtual VectorXa get_deformed_nodes(){return deformed_states;}
     virtual std::vector<int> get_constraint_map(){return fixed_vertices;}
@@ -136,10 +136,6 @@ public:
 	AScalar ComputeEnergy();
 	VectorXa ComputeGradient();
 	Eigen::SparseMatrix<AScalar> ComputeHessian();
-
-	AScalar ComputeEnergy(const VectorXa& parameters){}
-	VectorXa ComputeGradient(const VectorXa& parameters){}
-	Eigen::SparseMatrix<AScalar> ComputeHessian(const VectorXa& parameters){}
 
 	virtual cost_evaluation Evaluate(const VectorXa& parameters);
 

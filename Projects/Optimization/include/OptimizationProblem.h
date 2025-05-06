@@ -31,7 +31,7 @@ public:
     bool Optimize();
     OptimizationProblem(Scene* scene_m, std::string out_m, std::string initial_file="");
 
-	bool OptimizeLBFGS();
+	bool OptimizeGD();
 
 	void TestOptimizationGradient();
 };

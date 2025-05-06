@@ -1,20 +1,10 @@
 #include "../include/OptimizationProblem.h"
 #include "../include/damped_newton.h"
+#include "../include/enforce_matrix_constraints.h"
 #include <Eigen/CholmodSupport>
 #include <Eigen/Eigenvalues>
 #include <fstream>
 #include <iomanip>
-
-std::vector<Eigen::Triplet<AScalar>> SparseMatrixToTriplets(const Eigen::SparseMatrix<AScalar>& A)
-{
-	std::vector<Eigen::Triplet<AScalar> > triplets;
-
-	for (int k=0; k < A.outerSize(); ++k)
-        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(A,k); it; ++it)
-        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
-
-    return triplets;
-}
 
 bool OptimizationProblem::Optimize()
 {
@@ -50,12 +40,12 @@ bool OptimizationProblem::Optimize()
 	solver.SetOptions(std::move(options));
 	damped_newton_result result = solver.Solve();
 
-	VectorXa rods_radii = scene->parameters;
-    std::ofstream out_file(output_loc+"_radii.dat");
+	VectorXa opti_end_params = scene->parameters;
+    std::ofstream out_file(output_loc+"_sgn_params.dat");
     if (!out_file) {
         std::cerr << "Error opening file for writing: " << output_loc << std::endl;
     }
-    out_file << rods_radii << "\n";
+    out_file << opti_end_params << "\n";
     out_file.close();
 
 	return result.gradient < 1e-2;
@@ -67,6 +57,7 @@ struct GradientDescentOptions {
     double tolerance = 1e-3;
     double alpha = 0.3; // Armijo rule
     double beta = 0.8;  // backtracking
+	std::string output_file;
 };
 
 struct GradientDescentSummary {
@@ -92,8 +83,7 @@ GradientDescentSummary GradientDescent(
     std::vector<double> grad(n);
     std::vector<double> new_grad(n);
     std::vector<double> x_new(n);
-	std::string output_file = "../../../Projects/Optimization/optimization_output/gradient_descent.log";
-	std::ofstream log(output_file);
+	std::ofstream log(options.output_file);
 
     // std::cout << std::fixed << std::setprecision(10);
     std::cout << " Iter     h_norm         step size         Cost         New_Cost       r_norm     r_new_norm      T_time        Status\n";
@@ -196,7 +186,7 @@ GradientDescentSummary GradientDescent(
 	return summary;
 }
 
-bool OptimizationProblem::OptimizeLBFGS()
+bool OptimizationProblem::OptimizeGD()
 {
 	if(weights_p.rows() == 0)
 	{
@@ -212,10 +202,11 @@ bool OptimizationProblem::OptimizeLBFGS()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 1e-3;
+	options.initial_step_size = 1e-5;
+	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
 	std::cout << summary.BriefReport() << "\n";
-	std::string op_result = output_loc + "_gd_radii.dat";
+	std::string op_result = output_loc + "_gd_params.dat";
 	std::ofstream out(op_result);
 	for(int i=0; i<p.rows(); ++i)
 		out << parameters[i] << std::endl;

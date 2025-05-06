@@ -1,6 +1,6 @@
 #include "../include/ObjectiveEnergy.h"
 
-AScalar WEIGHTS = 1e-11;
+AScalar WEIGHTS = 1e-9;
 
 AScalar ApproximateTargetStiffnessTensor::ComputeEnergy(Scene* scene){
 

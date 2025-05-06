@@ -11,8 +11,18 @@ void Visualization::initializeScene(bool network){
 
     // Initialize polyscope
     polyscope::init();
+
+    igl::readOBJ(scene->mesh_file, meshV, meshF);
+    Vector3a min_corner = meshV.colwise().minCoeff();
+    Vector3a max_corner = meshV.colwise().maxCoeff();
+    AScalar length = max_corner(0)-min_corner(0);
+    meshV.rowwise() -= min_corner.transpose();
+    meshV /= length;
+    meshV_deformed = meshV;
+
     if(network){
         
+        network_visual = true;
         VectorXa X = scene->get_undeformed_nodes();
         std::vector<glm::vec3> nodes(X.rows()/3);
         for(int i = 0; i < nodes.size(); ++i) nodes[i] = glm::vec3({X(i*3, 0), X(i*3+1, 0), X(i*3+2, 0)});
@@ -25,34 +35,34 @@ void Visualization::initializeScene(bool network){
         rod_network->setColor(glm::vec3(0.255, 0.514, 0.996));
         rod_network->setRadius(0.00335);
 
-        Vector3a top_right({1,1,0});
-        Vector3a bottom_left({0,0,0});
-        sample_density = 25;
-        to_boundary_width = 4;
-        Vector3a start = bottom_left + (top_right-bottom_left)/sample_density;
-        std::vector<Vector3a> points((sample_density-1-2*to_boundary_width)*(sample_density-1-2*to_boundary_width), Vector3a::Zero());
-        for(int i = to_boundary_width; i < sample_density-1-to_boundary_width; i++){
-            for(int j = to_boundary_width; j < sample_density-1-to_boundary_width; j++){
-                int p_i = i-to_boundary_width;
-                int p_j = j-to_boundary_width;
-                points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j) = start;
-                points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(0) += (top_right-bottom_left)(0)/sample_density*j;
-                points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(1) += (top_right-bottom_left)(1)/sample_density*i;
-            }
-        }
-        probes = polyscope::registerPointCloud("sample locations", points);
-        sample_loc = points;     
-
-        probes->setPointRadius(0.007);
     }
+    else {
 
-    igl::readOBJ(scene->mesh_file, meshV, meshF);
-    Vector3a min_corner = meshV.colwise().minCoeff();
-    Vector3a max_corner = meshV.colwise().maxCoeff();
-    AScalar length = max_corner(0)-min_corner(0);
-    meshV.rowwise() -= min_corner.transpose();
-    meshV /= length;
-    meshV_deformed = meshV;
+        network_visual = false;
+
+        psMesh = polyscope::registerSurfaceMesh("surface mesh", meshV, meshF);
+        psMesh->setSurfaceColor(glm::vec3(0.255, 0.514, 0.996));
+        psMesh->setEdgeWidth(1.0);
+    }
+    Vector3a top_right({1,1,0});
+    Vector3a bottom_left({0,0,0});
+    sample_density = 25;
+    to_boundary_width = 4;
+    Vector3a start = bottom_left + (top_right-bottom_left)/sample_density;
+    std::vector<Vector3a> points((sample_density-1-2*to_boundary_width)*(sample_density-1-2*to_boundary_width), Vector3a::Zero());
+    for(int i = to_boundary_width; i < sample_density-1-to_boundary_width; i++){
+        for(int j = to_boundary_width; j < sample_density-1-to_boundary_width; j++){
+            int p_i = i-to_boundary_width;
+            int p_j = j-to_boundary_width;
+            points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j) = start;
+            points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(0) += (top_right-bottom_left)(0)/sample_density*j;
+            points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(1) += (top_right-bottom_left)(1)/sample_density*i;
+        }
+    }
+    probes = polyscope::registerPointCloud("sample locations", points);
+    sample_loc = points;     
+
+    probes->setPointRadius(0.007);
 
     polyscope::state::userCallback = [&](){ sceneCallback(); };
 }
@@ -62,8 +72,12 @@ void Visualization::sceneCallback(){
         VectorXa x = scene->get_deformed_nodes();
         std::vector<glm::vec3> nodes(x.rows()/3);
         for(int i = 0; i < nodes.size(); ++i) nodes[i] = glm::vec3({x(i*3, 0), x(i*3+1, 0), x(i*3+2, 0)});
-        rod_network -> updateNodePositions(nodes);
-        rod_vertices -> updatePointPositions(nodes);
+        if(network_visual){
+            rod_network -> updateNodePositions(nodes);
+            rod_vertices -> updatePointPositions(nodes);
+        } else {
+            psMesh -> updateVertexPositions(nodes);
+        }
 
         std::vector<Vector3a> points(sample_loc.size(), Vector3a::Zero());
         updateCurrentVertex();
@@ -76,8 +90,12 @@ void Visualization::sceneCallback(){
         VectorXa X = scene->get_undeformed_nodes();
         std::vector<glm::vec3> nodes(X.rows()/3);
         for(int i = 0; i < nodes.size(); ++i) nodes[i] = glm::vec3({X(i*3, 0), X(i*3+1, 0), X(i*3+2, 0)});
-        rod_network -> updateNodePositions(nodes);
-        rod_vertices -> updatePointPositions(nodes);
+        if(network_visual){
+            rod_network -> updateNodePositions(nodes);
+            rod_vertices -> updatePointPositions(nodes);
+        } else {
+            psMesh -> updateVertexPositions(nodes);
+        }
 
         std::vector<Vector3a> points(sample_loc.size(), Vector3a::Zero());
         meshV_deformed = meshV;
@@ -133,11 +151,13 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain yy", strain_yy);
     }
     // if(ImGui::InputInt("Stretch type", &stretch_type)){}
-    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("Stretch type", &stretch_type)) 
+    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::Checkbox("GD/SGN", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type)) 
     {
         if(optimized){
-            VectorXa mesh_radii(scene->parameter_dof());
-            std::string filename = "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_radii.dat";
+            VectorXa params_from_file(scene->parameter_dof());
+            std::string filename;
+            if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_gd_params.dat";
+            else filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_sgn_params.dat";
             std::ifstream in_file(filename);
             if (!in_file) {
                 std::cerr << "Error opening file for reading: " << filename << std::endl;
@@ -145,17 +165,16 @@ void Visualization::sceneCallback(){
         
             AScalar a; int cnt = 0;
             while (in_file >> a) {
-                mesh_radii(cnt) = a;
+                params_from_file(cnt) = a;
                 ++cnt;
             }
-            scene->parameters = mesh_radii;
+            scene->parameters = params_from_file;
 
-            rod_network->addEdgeScalarQuantity("rod radii", mesh_radii);
-            scene->simulateWithParameter(mesh_radii, stretch_type);
+            if(network_visual) rod_network->addEdgeScalarQuantity("rod radii", params_from_file);
+            else psMesh->addFaceScalarQuantity("Young's modulus", params_from_file);
+            scene->simulateWithParameter(params_from_file, stretch_type);
         }  else {
-            VectorXa mesh_radii(scene->parameter_dof()); mesh_radii.setConstant(1e-2);
-            scene->parameters = mesh_radii;
-            scene->simulateWithParameter(mesh_radii, stretch_type);
+                scene->simulateWithParameter(scene->get_initial_params(), stretch_type);
         }
 
     } 

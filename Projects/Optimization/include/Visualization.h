@@ -4,6 +4,8 @@
 #include "polyscope/polyscope.h"
 #include "polyscope/curve_network.h"
 #include "polyscope/point_cloud.h"
+#include "polyscope/surface_mesh.h"
+
 #include "Scene.h"
 
 #include "glm/ext.hpp"
@@ -16,6 +18,8 @@
 class Visualization
 {
 private:
+
+    bool network_visual;
 
     polyscope::CurveNetwork* rod_network;
     polyscope::PointCloud* rod_vertices;
@@ -30,8 +34,11 @@ private:
 
     Scene* scene;
     bool optimized = false;
+    bool gradient_descent = true;
     int stretch_type = 1;
     float C_test_point[2] = {0.5, 0.5};
+
+    polyscope::SurfaceMesh* psMesh;
 
 public:
     Visualization(Scene* scene_i): scene(scene_i){}

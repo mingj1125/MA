@@ -1,41 +1,10 @@
 #include "../include/MassSpring.h"
 #include "../include/MassSpring_Stretching.h"
+#include "../include/enforce_matrix_constraints.h"
 #include <igl/readOBJ.h>
 #include <unordered_set>
 #include <iostream>
 #include <Eigen/Eigen>
-
-Eigen::SparseMatrix<AScalar> EnforceSquareMatrixConstraints(Eigen::SparseMatrix<AScalar>& old, std::vector<int>& constraints, bool fill_ones = false)
-{
-
-	std::vector<Eigen::Triplet<AScalar>> triplets;// = SparseMatrixToTriplets(old);
-    for (int k=0; k < old.outerSize(); ++k)
-        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(old,k); it; ++it)
-        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
-
-	std::vector<Eigen::Triplet<AScalar>> new_triplets;
-
-	std::vector<bool> constrained(old.rows(), false);
-	for(int i=0; i<constraints.size(); ++i)
-		constrained[constraints[i]] = true;
-
-	for(int i=0; i<triplets.size(); ++i)
-	{
-		if(!constrained[triplets[i].row()] && !constrained[triplets[i].col()] )
-			new_triplets.push_back(triplets[i]);
-	}
-
-	if(fill_ones)
-	{
-		for(int i=0; i<constraints.size(); ++i)
-			new_triplets.push_back(Eigen::Triplet<AScalar>(constraints[i], constraints[i], 1.0));
-	}
-
-	Eigen::SparseMatrix<AScalar> new_matrix(old.rows(), old.cols());
-	new_matrix.setFromTriplets(new_triplets.begin(), new_triplets.end());
-
-	return new_matrix;
-}
 
 struct MeshEdge{
     int u_, v_;
@@ -423,10 +392,7 @@ cost_evaluation MassSpringCostFunction::Evaluate(const VectorXa& parameters)
     for(int i=0; i<constraints.size(); ++i)
     	gradient[constraints[i]] = 0.0;
 
-    std::vector<Eigen::Triplet<AScalar>> triplets; // = SparseMatrixToTriplets(hessian);
-    for (int k=0; k < hessian.outerSize(); ++k)
-        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(hessian,k); it; ++it)
-        	triplets.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
+    std::vector<Eigen::Triplet<AScalar>> triplets = SparseMatrixToTriplets(hessian);
 
     for(int i=0; i<triplets.size(); ++i)
     {
@@ -496,10 +462,7 @@ void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
     }
     K.setFromTriplets(triplets.begin(), triplets.end());
 
-    std::vector<Eigen::Triplet<AScalar>> triplets_k; // = SparseMatrixToTriplets(hessian);
-    for (int k=0; k < K.outerSize(); ++k)
-        for (Eigen::SparseMatrix<AScalar>::InnerIterator it(K,k); it; ++it)
-        	triplets_k.push_back(Eigen::Triplet<AScalar>(it.row(), it.col(), it.value()));
+    std::vector<Eigen::Triplet<AScalar>> triplets_k = SparseMatrixToTriplets(K);
 
     for(int i=0; i<triplets_k.size(); ++i)
     {

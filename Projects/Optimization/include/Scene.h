@@ -42,6 +42,7 @@ public:
 
     int parameter_dof();
     int x_dof();
+    VectorXa get_initial_params(){return sim.get_initial_parameter();}
     VectorXa get_undeformed_nodes(){return sim.get_undeformed_nodes();};
     VectorXa get_deformed_nodes(){return sim.get_deformed_nodes();};
     std::vector<int> get_constraints(){return sim.get_constraint_map();}
