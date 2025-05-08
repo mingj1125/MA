@@ -13,6 +13,7 @@ public:
     virtual VectorXa get_initial_parameter() = 0;
     virtual VectorXa get_undeformed_nodes() = 0;
     virtual VectorXa get_deformed_nodes() = 0;
+    virtual VectorXa get_current_parameter(){}
     virtual std::vector<int> get_constraint_map() = 0;
     virtual std::vector<std::array<size_t, 2>> get_edges(){}
     virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}

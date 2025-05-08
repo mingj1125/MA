@@ -4,6 +4,7 @@
 #include "Simulation.h"
 #include "damped_newton.h"
 #include "cost_function.h"
+#include "vector_manipulation.h"
 
 class LinearShell : public Simulation
 {
@@ -15,41 +16,43 @@ class LinearShell : public Simulation
     VectorXa rest_states;
     VectorXa youngsmodulus_each_element;
     Eigen::MatrixXi faces;
-    AScalar initial_youngsmodulus = 3.5e6;
+    AScalar initial_youngsmodulus = 3.0e6;
     AScalar nu = 0.45;
-    AScalar thickness = 0.001;
+    AScalar thickness = 0.0001;
     std::vector<int> fixed_vertices;
 
     AScalar kernel_std = 0.1;
+    std::vector<Matrix2a> strain_tensors_each_element;
+    std::vector<Matrix2a> stress_tensors_each_element;
 
     struct EvaluationInfo
     {
-        MatrixXa stress_gradients_wrt_spring_thickness;
+        MatrixXa stress_gradients_wrt_parameter;
         MatrixXa stress_gradients_wrt_x;
         Matrix3a stress_tensor;
 
-        std::vector<Matrix3a> F_gradients_wrt_x;
+        MatrixXa strain_gradients_wrt_x;
         Matrix3a strain_tensor;
     };
     EvaluationInfo eval_info_of_sample; // not using a vector for samples since have to do sample eval one by one anyways
 
     virtual void initializeScene(const std::string& filename);
-    virtual VectorXa get_initial_parameter(){return VectorXa p(youngsmodulus_each_element.rows()); p.setConstant(initial_youngsmodulus); return p;}
+    virtual VectorXa get_initial_parameter(){VectorXa p(youngsmodulus_each_element.rows()); p.setConstant(initial_youngsmodulus); return p;}
+    virtual VectorXa get_current_parameter(){return youngsmodulus_each_element;}
     virtual VectorXa get_undeformed_nodes(){return rest_states;}
     virtual VectorXa get_deformed_nodes(){return deformed_states;}
     virtual std::vector<int> get_constraint_map(){return fixed_vertices;}
-    virtual std::vector<std::array<size_t, 2>> get_edges(){}
-    virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
-    virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
+    virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
+    virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     virtual void setOptimizationParameter(VectorXa parameters){
         youngsmodulus_each_element = parameters;
     }
-    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
-    virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){}
+    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
+    virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);
-    virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_spring_thickness;}
+    virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_parameter;}
     virtual MatrixXa getStressGradientWrtx(){return eval_info_of_sample.stress_gradients_wrt_x;}
-    virtual MatrixXa getStrainGradientWrtx(){}
+    virtual MatrixXa getStrainGradientWrtx(){return eval_info_of_sample.strain_gradients_wrt_x;}
 
     // Native function
     void resetSimulation();  
@@ -58,12 +61,22 @@ class LinearShell : public Simulation
     void stretchDiagonal(AScalar strain);
     void stretchSlidingY(AScalar strain);
     void stretchSlidingX(AScalar strain);
+    void stretchShear(AScalar strain);
+
+    // Native function for evaluation
+    void computeStressAndStraininTriangles();
+    Vector3a computeWeightedStress(const Vector3a sample_loc, const Vector3a direction, 
+        std::vector<Vector3a>& gradients_wrt_E, std::vector<Vector3a>& gradients_wrt_nodes);
+    int pointInTriangle(const Vector2a sample_loc);
+    std::vector<Matrix2a> SGradientWrtx(int face_id);
+    AScalar computeWeightedStrain(const Vector3a sample_loc, Vector3a direction, std::vector<AScalar>& gradients_wrt_nodes);
+    std::vector<Matrix2a> GSGradientWrtx(int face_id);  
 
     // Simulator    
-    AScalar global_stopping_criteria = 1e-5;
+    AScalar global_stopping_criteria = 1e-7;
     int n_iter_hessian = 100;
     bool use_jacobi = false;
-    int max_iterations = 100;
+    int max_iterations = 1000;
 
     std::function<bool()> are_parameters_ok = [](){return true;};
 

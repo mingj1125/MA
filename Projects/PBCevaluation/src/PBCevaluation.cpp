@@ -173,10 +173,10 @@ Matrix<T, 2, 2> PBCevaluation::findBestStrainTensorviaProbing(const TV sample_lo
         TV2 normal = n.col(i).segment(0,2);
         A_block << normal(0)*normal(0), 2*normal(1)*normal(0), normal(1)*normal(1);
         A.row(i) = A_block;
-        }
-        VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*t);
-        fitted_symmetric_tensor << x(0), x(1), 
-                                    x(1), x(2);
+    }
+    VectorXT x = (A.transpose()*A).ldlt().solve(A.transpose()*t);
+    fitted_symmetric_tensor << x(0), x(1), 
+                                x(1), x(2);
 
     return fitted_symmetric_tensor;
 }

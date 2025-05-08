@@ -32,7 +32,7 @@ bool OptimizationProblem::Optimize()
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
 	options.max_iterations = 300;
-	options.output_log = output_loc;
+	options.output_log = output_loc+"_sgn";
 
 	DampedNewtonSolver solver;
 	solver.SetParameters(parameters);
@@ -54,7 +54,7 @@ bool OptimizationProblem::Optimize()
 struct GradientDescentOptions {
     int max_iterations = 1000;
     double initial_step_size = 1.0;
-    double tolerance = 1e-3;
+    double tolerance = 1e-10;
     double alpha = 0.3; // Armijo rule
     double beta = 0.8;  // backtracking
 	std::string output_file;
@@ -202,7 +202,7 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 1e-5;
+	options.initial_step_size = p(0)*p(0)/10;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
 	std::cout << summary.BriefReport() << "\n";
@@ -282,8 +282,9 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 	// Eigen::VectorXd eigenvalues = solver_eig.eigenvalues();
 	// std::cout << "eigenvalues: " << eigenvalues.transpose() << std::endl;
 	VectorXa dd = solver.solve(dfdx);
+	// std::cout << dfdp.transpose() << std::endl;
 
-	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp-(dcdp.transpose() * dd));
+	gradient.segment(data->x.rows(), data->p.rows()) = dfdp; //(dfdp-(dcdp.transpose() * dd));
 
 	return gradient;
 }
@@ -378,6 +379,7 @@ cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parame
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);
 	}
+	// std::cout << "current params: \n" << data->scene->get_curent_sim_params().transpose() << std::endl;
 	std::cout << "--------------------------------------------------------------------" << std::endl;
 
 	UpdateSensitivities();
@@ -430,7 +432,8 @@ void OptimizationProblem::TestOptimizationGradient(){
 
 	int test_size = 10; 
     VectorXa errors(test_size); 
-	AScalar step = 0.2;
+	AScalar step = init_p(0)/100;
+	// AScalar step = 10;
     VectorXa delta_h(p.rows()); delta_h.setConstant(step);
     for(int i = 0; i < test_size; ++i){
 

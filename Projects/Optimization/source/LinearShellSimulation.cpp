@@ -26,6 +26,9 @@ void LinearShell::initializeScene(const std::string& filename){
     youngsmodulus_each_element.resize(faces.rows());
     youngsmodulus_each_element.setConstant(initial_youngsmodulus);
     std::cout << "# faces initialized: " << faces.rows() << std::endl;
+
+    strain_tensors_each_element.resize(faces.rows());
+    stress_tensors_each_element.resize(faces.rows());
 }
 
 void LinearShell::resetSimulation(){
@@ -35,25 +38,28 @@ void LinearShell::resetSimulation(){
 
 void LinearShell::applyBoundaryStretch(int i, AScalar strain){
 
-    AScalar strain_apply = 1.1;
+    AScalar strain_apply = 1.005;
     if(strain > 0.) strain_apply = strain;
     switch (i)
     {
-    case 3:
-        stretchX(strain_apply);
-        break;
-    case 2:    
-        stretchY(strain_apply);
-        break;
-    case 1:
-        stretchDiagonal(strain_apply); 
-        break;   
-    case 4:
-        stretchSlidingY(strain_apply);
-        break;    
     case 5:
         stretchSlidingX(strain_apply);
-        break;        
+        break;
+    case 4:    
+        stretchSlidingY(strain_apply);
+        break;
+    case 6:
+        stretchDiagonal(strain_apply); 
+        break;   
+    case 2:
+        stretchY(strain_apply);
+        break;    
+    case 3:
+        stretchX(strain_apply);
+        break;  
+    case 1:
+        stretchShear(strain_apply);
+        break;          
     default:
         break;
     }
@@ -84,7 +90,7 @@ void LinearShell::stretchX(AScalar strain){
             ++count;
         }
     }
-    std::cout << count << std::endl;
+    // std::cout << count << std::endl;
 }
 
 void LinearShell::stretchY(AScalar strain){
@@ -155,6 +161,45 @@ void LinearShell::stretchSlidingX(AScalar strain){
     }
 }
 
+void LinearShell::stretchShear(AScalar strain){
+
+    resetSimulation();
+    AScalar tol = 1e-9;
+
+    // for(int i = 0; i < n_nodes; ++i){
+    //     Vector3a X = rest_states.segment(3*i, 3);
+    //     if(X(0) < tol && X(1) < tol || X(1) > 1.0 - tol && X(0) < tol) {
+    //         fixed_vertices.push_back(i*3);
+    //         fixed_vertices.push_back(i*3+1);
+    //         fixed_vertices.push_back(i*3+2);
+    //     }
+    //     else if(X(0) > 1.0 - tol && X(1) < tol || X(0) > 1.0 - tol && X(1) > 1.0 - tol) {
+    //         fixed_vertices.push_back(i*3);
+    //         fixed_vertices.push_back(i*3+1);
+    //         fixed_vertices.push_back(i*3+2);
+
+    //         deformed_states(3*i+1) = X(1)*strain;
+    //         deformed_states(3*i) = X(0)*strain;
+    //     }
+    // }
+    for(int i = 0; i < n_nodes; ++i){
+        Vector3a X = rest_states.segment(3*i, 3);
+        if(X(0) < tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+        }
+        else if(X(0) > 1.0 - tol) {
+            fixed_vertices.push_back(i*3);
+            fixed_vertices.push_back(i*3+1);
+            fixed_vertices.push_back(i*3+2);
+
+            deformed_states(3*i+1) = X(1)+strain-1;
+            deformed_states(3*i) = X(0)+strain-1;
+        }
+    }
+}
+
 void LinearShell::stretchDiagonal(AScalar strain){
 
     resetSimulation();
@@ -205,9 +250,10 @@ damped_newton_result LinearShell::Simulate(bool use_log)
     solver.SetCostFunction(&cost_function);
     solver.SetOptions(std::move(options));
 
-    // //cost_function.TestHessian(parameters);
+    // cost_function.TestHessian(parameters);
 
     damped_newton_result result = solver.Solve();
+    computeStressAndStraininTriangles();
 
     return result;
 }
@@ -349,7 +395,7 @@ cost_evaluation LinearShellCostFunction::Evaluate(const VectorXa& parameters)
         }
     }
 
-    hessian = EnforceSquareMatrixConstraints(hessian, constraints);
+    hessian = EnforceSquareMatrixConstraints(hessian, constraints, true);
 
     return std::tie(energy, gradient, hessian);
 }
@@ -377,4 +423,86 @@ void LinearShellCostFunction::Finalize(const VectorXa& parameters)
 {
     if(is_xdef)
       data->deformed_states = parameters;
+}
+
+void LinearShell::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
+    int n_params = n_nodes*3;
+
+	K.resize(n_params, n_params);
+    K.setZero();
+
+    stretchX(1.001); Simulate(false);
+
+    std::vector<Eigen::Triplet<AScalar>> triplets;
+
+    for(int i = 0; i < faces.rows(); ++i){
+        Eigen::Vector3i indices = faces.row(i);
+        Vector9a q;
+        Vector6a p;
+        for(int j = 0; j < 3; ++j){
+            q.segment(j*3,3) = deformed_states.segment(indices(j)*3, 3);
+            p.segment(j*2,2) = rest_states.segment(indices(j)*3, 2);
+        }
+
+        AScalar E = youngsmodulus_each_element(i);
+        AScalar lambda = E * nu /((1+nu)*(1-2*nu));
+        AScalar mu = E / (2*(1+nu));
+
+        Matrix9a J = PlanarStVenantKirchhoffHessianImpl_(q, p, thickness, lambda, mu);
+
+        for(int k = 0; k < 3; k++)
+                for(int l = 0; l < 3; l++)
+                    for(int a = 0; a < 3; a++)
+                        for (int j = 0; j < 3; j++){
+                            triplets.emplace_back(indices[k]*3+a, indices[l]*3+j, J(k*3 + a, l * 3 + j));
+                        }
+
+    }
+
+    K.setFromTriplets(triplets.begin(), triplets.end());
+
+    std::vector<Eigen::Triplet<AScalar>> triplets_k = SparseMatrixToTriplets(K);
+
+    for(int i=0; i<triplets_k.size(); ++i)
+    {
+    	if(std::isnan(triplets_k[i].value()))
+        {
+            std::cout << triplets_k[i].row() << " " << triplets_k[i].col() << " is nan" << std::endl;
+    		throw std::exception();
+        }
+    }
+
+    K = EnforceSquareMatrixConstraints(K, fixed_vertices, true);
+}
+
+void LinearShell::build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){
+
+	K.resize(n_nodes*3, faces.rows());
+    std::vector<Eigen::Triplet<AScalar>> triplets;
+
+    for(int i = 0; i < faces.rows(); ++i){
+        Eigen::Vector3i indices = faces.row(i);
+        Vector9a q;
+        Vector6a p;
+        for(int j = 0; j < 3; ++j){
+            q.segment(j*3,3) = deformed_states.segment(indices(j)*3, 3);
+            p.segment(j*2,2) = rest_states.segment(indices(j)*3, 2);
+        }
+
+        AScalar E = youngsmodulus_each_element(i);
+        AScalar lambda = E * nu /((1+nu)*(1-2*nu));
+        AScalar mu = E / (2*(1+nu));
+
+        Vector9a F = PlanarStVenantKirchhoffGradientImpl_(q, p, thickness, lambda, mu);
+        F /= E;
+        // std::cout << F.transpose() << std::endl;
+        std::vector<bool> constrained(deformed_states.rows(), false);
+	    for(int j=0; j<fixed_vertices.size(); ++j) constrained[fixed_vertices[j]] = true;
+        for(int j = 0; j < 3; ++j){
+            for(int k = 0; k < 3; ++k){
+                if(!constrained[indices(j)*3+k]) triplets.emplace_back(indices(j)*3+k, i, F(3*j+k));
+            }
+        }
+    }
+    K.setFromTriplets(triplets.begin(), triplets.end());
 }

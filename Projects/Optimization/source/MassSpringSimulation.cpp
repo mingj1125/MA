@@ -403,7 +403,7 @@ cost_evaluation MassSpringCostFunction::Evaluate(const VectorXa& parameters)
         }
     }
 
-    hessian = EnforceSquareMatrixConstraints(hessian, constraints);
+    hessian = EnforceSquareMatrixConstraints(hessian, constraints, true);
 
     return std::tie(energy, gradient, hessian);
 }

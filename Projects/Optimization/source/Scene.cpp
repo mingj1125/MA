@@ -56,7 +56,7 @@ void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs,
         for(int l = 0; l < sample_locs.size(); ++l){
             Matrix3a E = sim.findBestStrainTensorviaProbing(sample_locs[l], line_directions);
             Matrix3a S = sim.findBestStressTensorviaProbing(sample_locs[l], line_directions);
-            samples[l].t.col(i-1) = Vector3a({S(0,0), S(1,1), 2*S(1,0)});
+            samples[l].t.col(i-1) = Vector3a({S(0,0), S(1,1), S(1,0)});
             samples[l].n.col(i-1) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
             for(int j = 0; j < (samples[l].t_diff).size(); ++j){
                 samples[l].t_diff[j].col(i-1) = sim.getStressGradientWrtParameter().col(j);

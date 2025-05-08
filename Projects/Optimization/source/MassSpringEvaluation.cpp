@@ -81,11 +81,11 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
     eval_info_of_sample.stress_gradients_wrt_x.resize(3, deformed_states.rows());
     for(int i = 0; i < springs.size(); i++){
         VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
-        eval_info_of_sample.stress_gradients_wrt_spring_thickness.col(i) = Vector3a({x(0), x(3), 2*x(1)});
+        eval_info_of_sample.stress_gradients_wrt_spring_thickness.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     for(int i = 0; i < deformed_states.rows(); i++){
         VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
-        eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), 2*x(1)});
+        eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     fitted_tensor << x(0), x(1), x(2), 
                     x(1), x(3), x(4),
@@ -187,6 +187,7 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
     Xj = rest_states.segment(node_j*3, 3);
 
     AScalar b = spring->width;
+    Vector3a gradient_wrt_thickness_local; gradient_wrt_thickness_local.setZero();
     for (int i = 0; i <= n; ++i) {
         AScalar x = -b + 2.0 * b * i / n;
         Matrix3a S = spring->computeSecondPiolaStress(xi, xj, Xi, Xj);
@@ -194,7 +195,7 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
         AScalar kernel = gaussian_kernel(center_line_distance_to_sample+x);
 
         integral += kernel * f_val;
-        gradient_wrt_thickness += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
+        gradient_wrt_thickness_local += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
         weights += kernel;
 
         Eigen::Matrix<AScalar, 18, 1> diff_traction = SGradientWrtx(spring, xi, xj, Xi, Xj) *normal;
@@ -204,15 +205,15 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
     integral *= 2.0 * b / n;
     weights *= 2.0 * b / n;
     integral_diff_traction *= 2.0 * b / n;
-    gradient_wrt_thickness *= 2.0 * b / n;
-    gradient_wrt_thickness += integral/b;
+    gradient_wrt_thickness_local *= 2.0 * b / n;
+    gradient_wrt_thickness += integral/b + gradient_wrt_thickness_local;
     // std::cout << "Weights in spring: " << weights << std::endl;
 
     int offset_i = spring->p1;
     int offset_j = spring->p2;
     for(int i = 0; i < 3; ++i){
-        gradient_wrt_nodes[offset_i+i] = integral_diff_traction.segment<3>(i*3);
-        gradient_wrt_nodes[offset_j+i] = integral_diff_traction.segment<3>(i*3+9);
+        gradient_wrt_nodes[offset_i+i] += integral_diff_traction.segment<3>(i*3);
+        gradient_wrt_nodes[offset_j+i] += integral_diff_traction.segment<3>(i*3+9);
     }
 
     return integral;
@@ -269,7 +270,7 @@ AScalar MassSpring::integrateKernelOverDomain(const Vector3a sample_loc, const V
     AScalar weights = 0;
     for(int s = -density; s <= density; ++s){
         AScalar center_line_distance_to_sample = 2*b*s;
-        if(center_line_distance_to_sample > max+1e-7 || center_line_distance_to_sample < min-1e-7) continue;
+        if(center_line_distance_to_sample > max+1e-5 || center_line_distance_to_sample < min-1e-5) continue;
         for (int i = 0; i <= n; ++i) {
             AScalar x = -b + 2.0 * b * i / n;
             weights += gaussian_kernel(center_line_distance_to_sample+x);
