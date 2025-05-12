@@ -16,12 +16,12 @@ class LinearShell : public Simulation
     VectorXa rest_states;
     VectorXa youngsmodulus_each_element;
     Eigen::MatrixXi faces;
-    AScalar initial_youngsmodulus = 3.0e6;
+    AScalar initial_youngsmodulus = 2.5e6;
     AScalar nu = 0.45;
     AScalar thickness = 0.0001;
     std::vector<int> fixed_vertices;
 
-    AScalar kernel_std = 0.1;
+    AScalar kernel_std = 0.2;
     std::vector<Matrix2a> strain_tensors_each_element;
     std::vector<Matrix2a> stress_tensors_each_element;
 

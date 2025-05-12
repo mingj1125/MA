@@ -52,7 +52,7 @@ public:
             const std::vector<Vector3a> line_directions, bool opt = false);
     void buildSimulationHessian(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edx2(K);}
     void buildSimulationdEdxp(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edxp(K);}
-    void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type, 1.01); sim.Simulate();}
+    void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type, 1.1); sim.Simulate();}
     Matrix3a returnApproxStressInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     Matrix3a returnApproxStrainInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
 

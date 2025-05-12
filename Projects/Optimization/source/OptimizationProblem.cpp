@@ -8,18 +8,19 @@
 
 bool OptimizationProblem::Optimize()
 {
+	// so that the parameter is updated in its order of magnitude
 	if(weights_p.rows() == 0)
 	{
 		weights_p = Eigen::SparseMatrix<AScalar>(p.rows(), p.rows());
 		for(int i=0; i<p.rows(); ++i)
-			weights_p.coeffRef(i,i) = 1.0;
+			weights_p.coeffRef(i,i) = 1.0*p(0);
 	}
 
 	OptimizationProblemCostFunction cost_function(this);
 
 	VectorXa parameters(x.rows()*2 + p.rows());
 	parameters.setZero();
-	parameters.segment(x.rows(), p.rows()) = p;
+	parameters.segment(x.rows(), p.rows()) = p/p(0);
 
 	Eigen::SparseMatrix<AScalar> damp_matrix(parameters.rows(), parameters.rows());
 	for(int i=0; i<p.rows(); ++i)
@@ -27,8 +28,8 @@ bool OptimizationProblem::Optimize()
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 5e-3;
-	options.global_stopping_criteria = 1e-2;
+	options.damping = 5e-6;
+	options.global_stopping_criteria = 7e-3;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
 	options.max_iterations = 300;
@@ -54,7 +55,7 @@ bool OptimizationProblem::Optimize()
 struct GradientDescentOptions {
     int max_iterations = 1000;
     double initial_step_size = 1.0;
-    double tolerance = 1e-10;
+    double tolerance = 1e-3;
     double alpha = 0.3; // Armijo rule
     double beta = 0.8;  // backtracking
 	std::string output_file;
@@ -202,7 +203,8 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = p(0)*p(0)/10;
+	options.initial_step_size = p(0)*p(0)*6;
+	options.tolerance = 3e-9;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
 	std::cout << summary.BriefReport() << "\n";
@@ -264,13 +266,17 @@ void OptimizationProblemCostFunction::UpdateSensitivities(){
 	{
 		// Note that this is kinda ugly as Compute_dcdx setup a new simulation for constraints related modification (fixed dof)
 		dcdx += data->objective_energies[i]->Compute_dcdx(data->scene);
-		dcdp += data->objective_energies[i]->Compute_dcdp(data->scene);
+		dcdp += data->objective_energies[i]->Compute_dcdp(data->scene) * data->weights_p;
 		dfdx += data->objective_energies[i]->Compute_dfdx(data->scene);
-		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene);
+		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
 		d2fdx2 += data->objective_energies[i]->Compute_d2fdx2(data->scene);
-		d2fdxp += data->objective_energies[i]->Compute_d2fdxp(data->scene);
-		d2fdp2 += data->objective_energies[i]->Compute_d2fdp2(data->scene);
+		d2fdxp += data->objective_energies[i]->Compute_d2fdxp(data->scene) * data->weights_p;
+		d2fdp2 += data->weights_p.transpose() * data->objective_energies[i]->Compute_d2fdp2(data->scene) * data->weights_p;
 	}
+	// std::cout << "A: " << d2fdx2.norm() << std::endl;
+	// // // std::cout << "dfdx norm: " << dfdx.norm() << std::endl;
+	// std::cout << "B: " << d2fdxp.norm() << std::endl;
+	// std::cout << "C: " << d2fdp2.norm() << std::endl;
 
 }
 
@@ -282,9 +288,10 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 	// Eigen::VectorXd eigenvalues = solver_eig.eigenvalues();
 	// std::cout << "eigenvalues: " << eigenvalues.transpose() << std::endl;
 	VectorXa dd = solver.solve(dfdx);
-	// std::cout << dfdp.transpose() << std::endl;
 
-	gradient.segment(data->x.rows(), data->p.rows()) = dfdp; //(dfdp-(dcdp.transpose() * dd));
+	gradient.segment(data->x.rows(), data->p.rows()) = (dfdp-(dcdp.transpose() * dd));
+	std::cout << "simulation gradient: " << (dcdp.transpose() * dd).norm() << std::endl;
+	std::cout << "param gradient: " << dfdp.norm() << std::endl;
 
 	return gradient;
 }
@@ -360,7 +367,6 @@ void OptimizationProblemCostFunction::TakeStep(const VectorXa& step, const Vecto
 	std::cout << "residual on rest 0: " << step.segment(0, data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
 	std::cout << "residual on rest 1: " << step.segment(data->x.rows(), data->p.rows()).lpNorm<Eigen::Infinity>() << std::endl;
 	std::cout << "residual on rest 2: " << step.segment(data->x.rows() + data->p.rows(), data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
-	// new_parameters.segment(data->x.rows(), data->p.rows()) = new_parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(cut_lower_bound);
 }
 
 cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parameters)
@@ -379,7 +385,6 @@ cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parame
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);
 	}
-	// std::cout << "current params: \n" << data->scene->get_curent_sim_params().transpose() << std::endl;
 	std::cout << "--------------------------------------------------------------------" << std::endl;
 
 	UpdateSensitivities();

@@ -276,7 +276,6 @@ AScalar LinearShellCostFunction::ComputeEnergy(){
         AScalar mu = E / (2*(1+nu));
 
         energy += PlanarStVenantKirchhoffEnergyImpl_(q, p, data->thickness, lambda, mu);
-        // std::cout << inPlaneEnergyLocal(lambda, mu, X1, X2, X3, x1, x2, x3) << std::endl;
     }
     return energy;
 }
@@ -489,13 +488,15 @@ void LinearShell::build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){
             p.segment(j*2,2) = rest_states.segment(indices(j)*3, 2);
         }
 
-        AScalar E = youngsmodulus_each_element(i);
-        AScalar lambda = E * nu /((1+nu)*(1-2*nu));
-        AScalar mu = E / (2*(1+nu));
+        // AScalar E = youngsmodulus_each_element(i);
+        // AScalar lambda = E * nu /((1+nu)*(1-2*nu));
+        // AScalar mu = E / (2*(1+nu));
+
+        AScalar lambda = 1.0 * nu /((1+nu)*(1-2*nu));
+        AScalar mu = 1.0 / (2*(1+nu));
 
         Vector9a F = PlanarStVenantKirchhoffGradientImpl_(q, p, thickness, lambda, mu);
-        F /= E;
-        // std::cout << F.transpose() << std::endl;
+        
         std::vector<bool> constrained(deformed_states.rows(), false);
 	    for(int j=0; j<fixed_vertices.size(); ++j) constrained[fixed_vertices[j]] = true;
         for(int j = 0; j < 3; ++j){

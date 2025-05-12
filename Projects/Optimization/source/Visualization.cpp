@@ -156,8 +156,13 @@ void Visualization::sceneCallback(){
         if(optimized){
             VectorXa params_from_file(scene->parameter_dof());
             std::string filename;
-            if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_gd_params.dat";
-            else filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_sgn_params.dat";
+            if(network_visual){
+                if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_gd_params.dat";
+                else filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_sgn_params.dat";
+            } else {
+                if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_gd_params.dat";
+                else filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_sgn_params.dat";
+            }
             std::ifstream in_file(filename);
             if (!in_file) {
                 std::cerr << "Error opening file for reading: " << filename << std::endl;

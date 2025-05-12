@@ -154,10 +154,10 @@ void LinearShell::computeStressAndStraininTriangles(){
 
         Eigen::Matrix<AScalar, 3, 2> F = Q * P.lu().solve(Matrix2a::Identity());
         Matrix2a green_strain = 0.5 * (F.transpose()*F - Matrix2a::Identity());
-        if(std::abs(green_strain(0,0)) < 1e-6) green_strain(0,0) = 0;
-        if(std::abs(green_strain(1,0)) < 1e-6) green_strain(1,0) = 0;
-        if(std::abs(green_strain(0,1)) < 1e-6) green_strain(0,1) = 0;
-        if(std::abs(green_strain(1,1)) < 1e-6) green_strain(1,1) = 0;
+        // if(std::abs(green_strain(0,0)) < 1e-6) green_strain(0,0) = 0;
+        // if(std::abs(green_strain(1,0)) < 1e-6) green_strain(1,0) = 0;
+        // if(std::abs(green_strain(0,1)) < 1e-6) green_strain(0,1) = 0;
+        // if(std::abs(green_strain(1,1)) < 1e-6) green_strain(1,1) = 0;
         strain_tensors_each_element[i] = green_strain;
         Matrix2a S = (lambda*green_strain.trace()*Matrix2a::Identity() + 2*mu*green_strain);
         stress_tensors_each_element[i] = S;
