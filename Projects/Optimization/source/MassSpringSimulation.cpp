@@ -433,13 +433,11 @@ void MassSpringCostFunction::Finalize(const VectorXa& parameters)
       data->deformed_states = parameters;
 }
 
-void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
+void MassSpring::build_sim_hessian(Eigen::SparseMatrix<AScalar>& K){
     int n_params = n_nodes*3;
 
 	K.resize(n_params, n_params);
     K.setZero();
-
-    stretchX(1.00001); Simulate(false);
 
     std::vector<Eigen::Triplet<AScalar>> triplets;
     for(auto spring: springs){
@@ -473,7 +471,7 @@ void MassSpring::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
         }
     }
 
-    K = EnforceSquareMatrixConstraints(K, fixed_vertices, true);
+    K = EnforceSquareMatrixConstraints(K, fixed_vertices);
 }
 
 void MassSpring::build_d2Edxp(Eigen::SparseMatrix<AScalar>& K){

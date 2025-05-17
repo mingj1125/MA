@@ -34,6 +34,8 @@ public:
 	bool OptimizeGD();
 
 	void TestOptimizationGradient();
+	void ShowEnergyLandscape();
+	void TestOptimizationSensitivity();
 };
 
 class OptimizationProblemCostFunction : public CostFunction
@@ -48,6 +50,7 @@ public:
 	Eigen::SparseMatrix<AScalar> dcdp;
 	VectorXa dfdx;
 	VectorXa dfdp;
+	VectorXa dfdx_sim;
 
 	void UpdateSensitivities();
 

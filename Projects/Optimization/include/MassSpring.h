@@ -52,6 +52,7 @@ class MassSpring : public Simulation {
         Matrix3a stress_tensor;
 
         std::vector<Matrix3a> F_gradients_wrt_x;
+        MatrixXa F;
         Matrix3a strain_tensor;
     };
     EvaluationInfo eval_info_of_sample; // not using a vector for samples since have to do sample eval one by one anyways
@@ -70,7 +71,11 @@ class MassSpring : public Simulation {
             spring->set_width(spring_widths(spring->spring_id));
         }
     }
-    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
+    virtual void setDeformedState(VectorXa parameters){
+        deformed_states = parameters;
+    }
+    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
+    virtual void build_sim_hessian(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);
     virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_spring_thickness;}
@@ -95,7 +100,7 @@ class MassSpring : public Simulation {
     bool lineCutRodinSegment(Spring* spring, Vector3a sample_loc, Vector3a direction, AScalar& cut_point_barys);
     Vector3a integrateOverCrossSection(Spring* spring, const Vector3a normal, const AScalar center_line_distance_to_sample, 
         Vector3a& gradient_wrt_thickness, std::vector<Vector3a>& gradient_wrt_nodes);
-    Eigen::Matrix<AScalar, 18, 3> SGradientWrtx(Spring* spring, Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj);
+    Eigen::Matrix<AScalar, 18, 1> tGradientWrtx(Spring* spring, Vector3a normal);
     AScalar integrateKernelOverDomain(const Vector3a sample_loc, const Vector3a line_direction);
     Matrix3a computeWeightedDeformationGradient(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
 

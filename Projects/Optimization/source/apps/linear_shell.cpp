@@ -11,17 +11,17 @@ int main(){
     std::string mesh_name = "grid_double_refined";
     scene.buildSceneFromMesh(mesh_name);
 
-    Visualization vis(&scene);
-    vis.initializeScene(false);
-    vis.run();
+    // Visualization vis(&scene);
+    // vis.initializeScene(false);
+    // vis.run();
 
     std::vector<Vector3a> sample_locs;
     sample_locs.push_back({0.76, 0.76, 0});
     sample_locs.push_back({0.50, 0.76, 0});
     sample_locs.push_back({0.24, 0.76, 0});
-    // sample_locs.push_back({0.76, 0.50, 0});
-    // sample_locs.push_back({0.50, 0.50, 0});
-    // sample_locs.push_back({0.24, 0.50, 0});
+    // // sample_locs.push_back({0.76, 0.50, 0});
+    // sample_locs.push_back({0.50, 0.52, 0});
+    // // sample_locs.push_back({0.24, 0.50, 0});
     sample_locs.push_back({0.76, 0.24, 0});
     sample_locs.push_back({0.50, 0.24, 0});
     sample_locs.push_back({0.24, 0.24, 0});
@@ -41,8 +41,10 @@ int main(){
     // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(sample_locs);
     p.objective_energies.push_back(e);
     // p.TestOptimizationGradient();
+    // p.TestOptimizationSensitivity();
     // if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";
-    // if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    // p.ShowEnergyLandscape();
 
     return 0;
 }

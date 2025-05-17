@@ -19,11 +19,14 @@ Matrix3a LinearShell::findBestStressTensorviaProbing(const Vector3a sample_loc, 
 
         t.col(i) = computeWeightedStress(sample_loc, direction, gradient_t_di, gradient_t_wrt_x_di);
         n.col(i) = direction_normal;
+        // std::cout << "direction : " << direction.transpose() << "\n traction: " << t.col(i).transpose() << std::endl;
         for(int j = 0; j < gradient_t.size(); ++j){
             gradient_t[j].col(i) = gradient_t_di[j];
         }
         for(int j = 0; j < gradient_t_wrt_x.size(); ++j){
             gradient_t_wrt_x[j].col(i) = gradient_t_wrt_x_di[j];
+            // if(gradient_t_wrt_x_di[j].norm() > 0) std::cout << "x " << j << " dtdx : " << gradient_t_wrt_x_di[j].transpose() << std::endl;
+            // if(j == 162) std::cout << "x " << j << " dtdx : " << gradient_t_wrt_x_di[j].transpose() << std::endl;
         }
     }
 
@@ -48,15 +51,21 @@ Matrix3a LinearShell::findBestStressTensorviaProbing(const Vector3a sample_loc, 
         }
     }
     VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+    AScalar epsilon = 1e-1;
+    x = (x.array().abs() < epsilon).select(0.0, x);
+    // std::cout << "stress : " << x.transpose() << std::endl;
     eval_info_of_sample.stress_gradients_wrt_parameter.resize(3, faces.rows());
     eval_info_of_sample.stress_gradients_wrt_x.resize(3, deformed_states.rows());
     for(int i = 0; i < faces.rows(); i++){
-        VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
-        eval_info_of_sample.stress_gradients_wrt_parameter.col(i) = Vector3a({x(0), x(3), x(1)});
+        VectorXa x_temp = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
+        eval_info_of_sample.stress_gradients_wrt_parameter.col(i) = Vector3a({x_temp(0), x_temp(3), x_temp(1)});
     }
     for(int i = 0; i < deformed_states.rows(); i++){
-        VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
-        eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), x(1)});
+        VectorXa x_temp = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
+        AScalar epsilon = 1e-1;
+        x_temp = (x_temp.array().abs() < epsilon).select(0.0, x_temp);
+        eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x_temp(0), x_temp(3), x_temp(1)});
+        // if(i == 162) std::cout << "stress_dx " << i << " : " << x_temp.transpose() << std::endl;
     }
     fitted_tensor << x(0), x(1), x(2), 
                     x(1), x(3), x(4),
@@ -81,8 +90,8 @@ Vector3a LinearShell::computeWeightedStress(const Vector3a sample_loc, const Vec
 
         Vector3a weighted_traction = Vector3a::Zero();
         AScalar weights = 0;
-        AScalar step = 0.01;
-        int n = 5*kernel_std/step; // Discretization points for cut segment
+        AScalar step = std::min(0.01, kernel_std);
+        int n = 4*kernel_std/step; // Discretization points for cut segment
 
         for(int i = -n; i <= n; ++i){
             Vector3a point = sample_loc + i*direction*step;
@@ -106,8 +115,9 @@ Vector3a LinearShell::computeWeightedStress(const Vector3a sample_loc, const Vec
             std::vector<Matrix2a> dSdxs = SGradientWrtx(t);
             Eigen::Vector3i indices = faces.row(t);
             for(int j = 0; j < dSdxs.size()/3; ++j){
-                for(int k = 0; k < 3; ++k){
-                    gradients_wrt_nodes[indices(j)*3+k].segment<2>(0) = dSdxs[3*j+k] * direction_normal.segment<2>(0) * gaussian_kernel(dist);
+                for(int k = 0; k < 2; ++k){
+                    gradients_wrt_nodes[indices(j)*3+k].segment<2>(0) += dSdxs[3*j+k] * direction_normal.segment<2>(0) * gaussian_kernel(dist);
+                    // if(indices(j)*3+k == 162) std::cout << "stress_dx at node " << indices(j)*3+k << " : "  <<  dSdxs[3*j+k] << std::endl;
                 }
             }
         }
@@ -116,6 +126,7 @@ Vector3a LinearShell::computeWeightedStress(const Vector3a sample_loc, const Vec
 
         stress = res.segment<3>(0);
         sum = res(3);
+
         for(int i = 0; i < faces.rows(); i++){
             gradients_wrt_E[i] *= step;
             gradients_wrt_E[i] /= sum;
@@ -123,6 +134,8 @@ Vector3a LinearShell::computeWeightedStress(const Vector3a sample_loc, const Vec
         for(int i = 0; i < deformed_states.rows(); i++){
             gradients_wrt_nodes[i] *= step;
             gradients_wrt_nodes[i] /= sum;
+            // if(i == 162) std::cout << "sum: " << sum << std::endl;
+            // if(i == 162) std::cout << "after normalization : "  <<  gradients_wrt_nodes[i].transpose() << std::endl;
         }
 
         if (sum <= 0.) std::cout << "Sum is 0 for direction " << direction.transpose() << std::endl; 
@@ -201,7 +214,7 @@ std::vector<Matrix2a> LinearShell::SGradientWrtx(int face_id){
     AScalar lambda = E * nu /((1+nu)*(1-2*nu));
     AScalar mu = E / (2*(1+nu));
 
-    Eigen::Matrix<AScalar, 4, 9> diff_S = dSdx(q, p, thickness, lambda, mu);
+    Eigen::Matrix<AScalar, 4, 9> diff_S = dSdx(q, p, lambda, mu);
     std::vector<Matrix2a> res(9);
     for(int j = 0; j < 9; ++j){
         Matrix2a dSdx_i;
@@ -227,9 +240,11 @@ Matrix3a LinearShell::findBestStrainTensorviaProbing(const Vector3a sample_loc, 
 
         t(i) = computeWeightedStrain(sample_loc, direction, gradient_t_wrt_x_di);
         n.col(i) = direction;
+        // std::cout << "direction : " << direction.transpose() << "\n strain: " << t(i) << std::endl;
         
         for(int j = 0; j < gradient_t_wrt_x.size(); ++j){
             gradient_t_wrt_x[j](i) = gradient_t_wrt_x_di[j];
+            // if(std::abs(gradient_t_wrt_x_di[j] )> 0) std::cout << "x " << j << " dedx : " << gradient_t_wrt_x_di[j] << std::endl;
         }
     }
 
@@ -243,10 +258,16 @@ Matrix3a LinearShell::findBestStrainTensorviaProbing(const Vector3a sample_loc, 
         A.row(i) = A_block;
     }
     VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*t);
+    AScalar epsilon = 1e-8;
+    x = (x.array().abs() < epsilon).select(0.0, x);
+    // std::cout << "strain : " << x.transpose() << std::endl;
     eval_info_of_sample.strain_gradients_wrt_x.resize(3, deformed_states.rows());
     for(int i = 0; i < deformed_states.rows(); i++){
-        VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*gradient_t_wrt_x[i]);
-        eval_info_of_sample.strain_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), 2*x(1)});
+        VectorXa x_temp = (A.transpose()*A).ldlt().solve(A.transpose()*gradient_t_wrt_x[i]);
+        // AScalar epsilon = 1e-3;
+        // x_temp = (x_temp.array().abs() < epsilon).select(0.0, x_temp);
+        eval_info_of_sample.strain_gradients_wrt_x.col(i) = Vector3a({x_temp(0), x_temp(2), 2*x_temp(1)});
+        // if(i == 162) std::cout << "strain_dx " << i << " : " << eval_info_of_sample.strain_gradients_wrt_x.col(i).transpose() << std::endl;
     }
     fitted_symmetric_tensor << x(0), x(1), 0,
                                 x(1), x(2), 0,
@@ -269,8 +290,8 @@ AScalar LinearShell::computeWeightedStrain(const Vector3a sample_loc, Vector3a d
 
     AScalar weighted_strain = 0;
     AScalar weights = 0;
-    AScalar step = 0.01;
-    int n = 5*kernel_std/step; // Discretization points for cut segment
+    AScalar step = std::min(0.01, kernel_std);
+    int n = 4*kernel_std/step; // Discretization points for cut segment
     for(int i = -n; i <= n; ++i){
         Vector3a point = sample_loc + i*direction*step;
         if(point(0) > 1. || point(0) < 0. || point(1) > 1. || point(1) < 0.) continue;
@@ -295,7 +316,8 @@ AScalar LinearShell::computeWeightedStrain(const Vector3a sample_loc, Vector3a d
         for(int j = 0; j < dGSdxs.size()/3; ++j){
             for(int k = 0; k < 3; ++k){
                 AScalar strain_dx = ((direction.segment<2>(0)).transpose()) * (dGSdxs[3*j+k] * direction.segment<2>(0));
-                gradients_wrt_nodes[indices(j)*3+k] = strain_dx * gaussian_kernel(dist);
+                // if(indices(j)*3+k == 162) std::cout << "strain_dx at node " << indices(j)*3+k << " : "  << dGSdxs[3*j+k] << std::endl;
+                gradients_wrt_nodes[indices(j)*3+k] += strain_dx * gaussian_kernel(dist);
             }
         }
     }

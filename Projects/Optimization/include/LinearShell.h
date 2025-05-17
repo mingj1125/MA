@@ -21,7 +21,7 @@ class LinearShell : public Simulation
     AScalar thickness = 0.0001;
     std::vector<int> fixed_vertices;
 
-    AScalar kernel_std = 0.2;
+    AScalar kernel_std = 0.02;
     std::vector<Matrix2a> strain_tensors_each_element;
     std::vector<Matrix2a> stress_tensors_each_element;
 
@@ -47,7 +47,12 @@ class LinearShell : public Simulation
     virtual void setOptimizationParameter(VectorXa parameters){
         youngsmodulus_each_element = parameters;
     }
+    virtual void setDeformedState(VectorXa parameters){
+        deformed_states = parameters;
+        computeStressAndStraininTriangles();
+    }
     virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
+    virtual void build_sim_hessian(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);
     virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_parameter;}

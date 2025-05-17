@@ -1,6 +1,7 @@
 #include "../include/ObjectiveEnergy.h"
+#include "../include/enforce_matrix_constraints.h"
 
-AScalar WEIGHTS = 1e-9;
+AScalar WEIGHTS = 1e-8;
 
 AScalar ApproximateTargetStiffnessTensor::ComputeEnergy(Scene* scene){
 
@@ -62,6 +63,37 @@ VectorXa ApproximateTargetStiffnessTensor::Compute_dfdx(Scene* scene){
     VectorXa dfdx = gradient_wrt_x;
 
     return dfdx;
+}
+
+VectorXa ApproximateTargetStiffnessTensor::Compute_dfdx_sim(Scene* scene){
+    
+    VectorXa gradient_wrt_x(scene->x_dof()*scene->num_test); gradient_wrt_x.setZero();
+    auto sample_Cs_info = scene->sample_Cs_info;
+
+    for(int test = 0; test < scene->num_test; ++test){
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+        for(int k = 0; k < target_locations.size(); ++k){
+            Vector6a target_C = target_stiffness_tensors[k];
+            for(int i = 0; i < scene->x_dof(); ++i){
+                if(constrained[i]) continue;
+                // if(sample_Cs_info[k].C_diff_x_sim[i].norm() > 0) std::cout << i << " dCdx : \n"<< sample_Cs_info[k].C_diff_x_sim[i] << std::endl;
+    
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+    
+                    if(consider_entry(j) == 1) g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x_sim[i](j, test);
+    
+                }
+                gradient_wrt_x(scene->x_dof()*test+ i) += g;
+            }
+        }
+    }
+    
+    return gradient_wrt_x;
 }
 
 VectorXa ApproximateTargetStiffnessTensor::Compute_dfdp(Scene* scene){
@@ -188,6 +220,16 @@ void ApproximateTargetStiffnessTensor::SimulateAndCollect(Scene* scene){
     scene->findBestCTensorviaProbing(target_locations, directions, true);
 }
 
+void ApproximateTargetStiffnessTensor::OnlyCollect(Scene* scene, MatrixXa offsets){
+
+    std::vector<Vector3a> directions;
+    for(int i = 0; i < scene->num_directions; ++i) {
+        AScalar angle = i*2*M_PI/scene->num_directions; 
+        directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
+    }
+    scene->CTensorPerturbx(target_locations, directions, offsets);
+}
+
 
 AScalar ApproximateStiffnessTensorRelationship::ComputeEnergy(Scene* scene){
 
@@ -232,7 +274,6 @@ VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdx(Scene* scene){
     }
 
     for(int k = 0; k < target_locations.size(); ++k){
-        Vector3a target_location = target_locations[k];
         for(int i = 0; i < gradient_wrt_x.size(); ++i){
             if(constrained[i]) continue;
             AScalar g = 0;
@@ -249,6 +290,35 @@ VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdx(Scene* scene){
     VectorXa dfdx = gradient_wrt_x*WEIGHTS/target_locations.size();
 
     return dfdx;
+}
+
+VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdx_sim(Scene* scene){
+    
+    VectorXa gradient_wrt_x(scene->x_dof()*scene->num_test); gradient_wrt_x.setZero();
+    auto sample_Cs_info = scene->sample_Cs_info;
+
+    for(int test = 0; test < scene->num_test; ++test){
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+        for(int k = 0; k < target_locations.size(); ++k){
+            for(int i = 0; i < scene->x_dof(); ++i){
+                if(constrained[i]) continue;
+    
+                AScalar g = 0;
+                g += (sample_Cs_info[k].C_entry(0) -  ratio*sample_Cs_info[k].C_entry(1))*sample_Cs_info[k].C_diff_x_sim[i](0, test);
+                g += (sample_Cs_info[k].C_entry(0) -  ratio*sample_Cs_info[k].C_entry(1))*(-ratio)*sample_Cs_info[k].C_diff_x_sim[i](1, test);
+                g += (sample_Cs_info[k].C_entry(3) -  ratio*sample_Cs_info[k].C_entry(1))*sample_Cs_info[k].C_diff_x_sim[i](3, test);
+                g += (sample_Cs_info[k].C_entry(3) -  ratio*sample_Cs_info[k].C_entry(1))*(-ratio)*sample_Cs_info[k].C_diff_x_sim[i](1, test);
+    
+                gradient_wrt_x(scene->x_dof()*test+ i) += g;
+            }
+        }
+    }
+    
+    return gradient_wrt_x*WEIGHTS/target_locations.size();
 }
 
 VectorXa ApproximateStiffnessTensorRelationship::Compute_dfdp(Scene* scene){
@@ -369,4 +439,14 @@ void ApproximateStiffnessTensorRelationship::SimulateAndCollect(Scene* scene){
         directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
     }
     scene->findBestCTensorviaProbing(target_locations, directions, true);
+}
+
+void ApproximateStiffnessTensorRelationship::OnlyCollect(Scene* scene, MatrixXa offsets){
+
+    std::vector<Vector3a> directions;
+    for(int i = 0; i < scene->num_directions; ++i) {
+        AScalar angle = i*2*M_PI/scene->num_directions; 
+        directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
+    }
+    scene->CTensorPerturbx(target_locations, directions, offsets);
 }

@@ -11,9 +11,9 @@ int main(){
     std::string mesh_name = "grid_double_refined";
     scene.buildSceneFromMesh(mesh_name);
 
-    Visualization vis(&scene);
-    vis.initializeScene(true);
-    vis.run();
+    // Visualization vis(&scene);
+    // vis.initializeScene(true);
+    // vis.run();
 
     std::vector<Vector3a> sample_locs;
     sample_locs.push_back({0.76, 0.76, 0});
@@ -33,6 +33,7 @@ int main(){
     std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(sample_locs);
     p.objective_energies.push_back(e);
     // p.TestOptimizationGradient();
+    // p.TestOptimizationSensitivity();
     // if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";
     if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
 

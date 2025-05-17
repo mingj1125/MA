@@ -19,7 +19,10 @@ public:
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene){}
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene){}
 
+    virtual VectorXa Compute_dfdx_sim(Scene* scene){}
+
     virtual void SimulateAndCollect(Scene* scene){}
+    virtual void OnlyCollect(Scene* scene, MatrixXa offsets){}
 };
 
 
@@ -30,19 +33,12 @@ public:
     Eigen::Vector<int, 6> consider_entry; // 1 if considered
     std::vector<Vector3a> target_locations;
     std::vector<Vector6a> target_stiffness_tensors;
-    std::vector<Eigen::Vector3d> directions;
-
 
     ApproximateTargetStiffnessTensor(std::vector<Vector3a> target_locations_m, std::vector<Vector6a> target_stiffness_tensors_m){
         target_locations = target_locations_m;
         target_stiffness_tensors = target_stiffness_tensors_m;
         // consider_entry.setConstant(1);
         setConsideringEntry({1, 1, 0, 1, 0, 0});
-        int num_directions = 20;
-        for(int i = 0; i < num_directions; ++i) {
-            double angle = i*2*M_PI/num_directions; 
-            directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
-        }
     }
 
     void setConsideringEntry(Eigen::Vector<int, 6> ce){
@@ -58,7 +54,10 @@ public:
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene);
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene);
 
+    virtual VectorXa Compute_dfdx_sim(Scene* scene);
+
     virtual void SimulateAndCollect(Scene* scene);
+    virtual void OnlyCollect(Scene* scene, MatrixXa offsets);
 
 };
 
@@ -74,11 +73,6 @@ public:
 
     ApproximateStiffnessTensorRelationship(std::vector<Vector3a> target_locations_m){
         target_locations = target_locations_m;
-        // int num_directions = 20;
-        // for(int i = 0; i < num_directions; ++i) {
-        //     double angle = i*2*M_PI/num_directions; 
-        //     directions.push_back(Eigen::Vector3d{std::cos(angle), std::sin(angle), 0});
-        // }
     }
 
     virtual AScalar ComputeEnergy(Scene* scene);
@@ -90,7 +84,10 @@ public:
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene);
     virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene);
 
+    virtual VectorXa Compute_dfdx_sim(Scene* scene);
+
     virtual void SimulateAndCollect(Scene* scene);
+    virtual void OnlyCollect(Scene* scene, MatrixXa offsets);
 
 };
 

@@ -16,7 +16,7 @@ Vector2a solveLineIntersection(const Vector3a sample_point, const Vector3a line_
 Matrix3a MassSpring::Spring::computeSecondPiolaStress(Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj){
     AScalar E = YoungsModulus;
     AScalar l = (xi-xj).norm(); AScalar L0 = (Xi-Xj).norm();
-    Vector3a N1 = rest_tangent;
+    Vector3a N1 = (Xj - Xi).normalized(); //rest_tangent;
     Vector3a n1 = (xj - xi).normalized();
     Vector3a N2 = Vector3a({0,0,1});
     Vector3a n2 = Vector3a({0,0,1});
@@ -52,6 +52,7 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
             gradient_t[j].col(i) = gradient_t_di[j];
         }
         for(int j = 0; j < gradient_t_wrt_x.size(); ++j){
+            // if(j == 162) std::cout << "x_temp: " << gradient_t_wrt_x_di[j].transpose() << std::endl;
             gradient_t_wrt_x[j].col(i) = gradient_t_wrt_x_di[j];
         }
     }
@@ -73,6 +74,7 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
             b_diff[j].segment(i*3, 3) = gradient_t[j].col(i);
         }
         for(int j = 0; j < deformed_states.rows(); ++j){
+            // if(j == 162) std::cout << "x_temp: " << gradient_t_wrt_x[j].col(i).transpose() << std::endl;
             b_diff_wrt_x[j].segment(i*3, 3) = gradient_t_wrt_x[j].col(i);
         }
     }
@@ -84,7 +86,10 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
         eval_info_of_sample.stress_gradients_wrt_spring_thickness.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     for(int i = 0; i < deformed_states.rows(); i++){
+        // if(i == 162) std::cout << "x_temp: " << b_diff_wrt_x[i].transpose() << std::endl;
         VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
+        // AScalar epsilon = 1e-4;
+        // x = (x.array().abs() < epsilon).select(0.0, x);
         eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     fitted_tensor << x(0), x(1), x(2), 
@@ -138,6 +143,7 @@ Vector3a MassSpring::computeWeightedStress(const Vector3a sample_loc, const Vect
         gradients_wrt_parameter[i] /= weight_sum;
     }
     for(int i = 0; i < deformed_states.rows(); i++){
+        // if(i == 162) std::cout << gradients_wrt_nodes[i].transpose() << std::endl;
         gradients_wrt_nodes[i] /= weight_sum;
     }
     // std::cout << weight_sum << std::endl;
@@ -190,15 +196,19 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
     Vector3a gradient_wrt_thickness_local; gradient_wrt_thickness_local.setZero();
     for (int i = 0; i <= n; ++i) {
         AScalar x = -b + 2.0 * b * i / n;
-        Matrix3a S = spring->computeSecondPiolaStress(xi, xj, Xi, Xj);
-        Vector3a f_val = S * normal;
+        AScalar l = (xi-xj).norm(); AScalar L0 = (Xi-Xj).norm();
+        Vector3a n1 = (xj - xi).normalized();
+        AScalar lambda1 = l/L0;
+        AScalar strain = 0.5*(l*l/(L0*L0)-1);
+        AScalar stress = strain * spring->YoungsModulus;
+        Vector3a f_val = n1*stress*n1.dot(normal);
         AScalar kernel = gaussian_kernel(center_line_distance_to_sample+x);
 
         integral += kernel * f_val;
         gradient_wrt_thickness_local += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
         weights += kernel;
 
-        Eigen::Matrix<AScalar, 18, 1> diff_traction = SGradientWrtx(spring, xi, xj, Xi, Xj) *normal;
+        Eigen::Matrix<AScalar, 18, 1> diff_traction = tGradientWrtx(spring, normal);
         integral_diff_traction += kernel * diff_traction;
     }
 
@@ -211,30 +221,31 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
 
     int offset_i = spring->p1;
     int offset_j = spring->p2;
-    for(int i = 0; i < 3; ++i){
-        gradient_wrt_nodes[offset_i+i] += integral_diff_traction.segment<3>(i*3);
-        gradient_wrt_nodes[offset_j+i] += integral_diff_traction.segment<3>(i*3+9);
+    for(int i = 0; i < 2; ++i){
+        gradient_wrt_nodes[offset_i*3+i] += integral_diff_traction.segment<3>(i*3);
+        gradient_wrt_nodes[offset_j*3+i] += integral_diff_traction.segment<3>(i*3+9);
     }
 
     return integral;
 }
 
-Eigen::Matrix<AScalar, 18, 3> MassSpring::SGradientWrtx(Spring* spring, Vector3a xi, Vector3a xj, Vector3a Xi, Vector3a Xj){
-
+Eigen::Matrix<AScalar, 18, 1> MassSpring::tGradientWrtx(Spring* spring, Vector3a normal){
+    
+    int node_i = spring->p1;
+    int node_j = spring->p2;
+    Vector3a xi, xj, Xi, Xj;
+    xi = deformed_states.segment(node_i*3, 3);
+    xj = deformed_states.segment(node_j*3, 3);
+    Xi = rest_states.segment(node_i*3, 3);
+    Xj = rest_states.segment(node_j*3, 3);
     Vector6a X; X.segment<3>(0) = Xi; X.segment<3>(3) = Xj; 
     Vector6a x; x.segment<3>(0) = xi; x.segment<3>(3) = xj; 
-    Vector3a N1 = spring->rest_tangent;
-    Eigen::Matrix<AScalar, 9, 6> diff_S = dSdx(spring->YoungsModulus, X, x, N1);
+    Eigen::Matrix<AScalar, 3, 6> diff_S = dtdx(spring->YoungsModulus, X, x, normal);
 
-    Eigen::Matrix<AScalar, 3, 9> diff_S_i = diff_S.block(0,0,9,3).transpose();
-    Eigen::Matrix<AScalar, 3, 9> diff_S_j = diff_S.block(0,3,9,3).transpose();
-
-    Eigen::Matrix<AScalar, 18, 3> res;
-    for(int i = 0; i < 3; ++i){
-        res.block(i*3, 0, 3, 3) = diff_S_i.block(0, i*3, 3, 3);
-        res.block(i*3+9, 0, 3, 3) = diff_S_j.block(0, i*3, 3, 3);
+    Eigen::Matrix<AScalar, 18, 1> res; res.setZero();
+    for(int i = 0; i < 6; ++i){
+        res.segment<3>(i*3) = diff_S.col(i);
     }
-
     return res;
 }
 
@@ -322,6 +333,8 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
         for(auto spring: springs){
             AScalar cut_point_barys;
             if(lineCutRodinSegment(spring, sample_loc, direction, cut_point_barys)){
+                if(std::abs(cut_point_barys-1) < 1e-1) cut_point_barys = 1.0;
+                if(std::abs(cut_point_barys) < 1e-1) cut_point_barys = 0.0;
                 cut = true;
 
                 Vector3a xi, xj, Xi, Xj;
@@ -336,15 +349,14 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
                 Eigen::Vector<int,6> offsets; 
                 offsets.segment<3>(0) = Eigen::Vector3i({node_i*3, node_i*3+1, node_i*3+2}); 
                 offsets.segment<3>(3) = Eigen::Vector3i({node_j*3, node_j*3+1, node_j*3+2}); 
-                Eigen::Matrix<AScalar, 6, 3> gradients;
-                gradients.block(0, 0, 3, 3) = MatrixXa::Identity(3,3)*(cut_point_barys);
-                gradients.block(3, 0, 3, 3) = MatrixXa::Identity(3,3)*(1-cut_point_barys);
+                Eigen::Matrix<AScalar, 6, 3> gradients; gradients.setZero();
+                gradients.block(0, 0, 2, 2) = MatrixXa::Identity(2,2)*(cut_point_barys);
+                gradients.block(3, 0, 2, 2) = MatrixXa::Identity(2,2)*(1-cut_point_barys);
 
                 AScalar distance = (cut_point[0] - sample_loc[0])/direction[0];
                 if(abs(direction[0]) < 1e-9) distance =  (cut_point[1] - sample_loc[1])/direction[1];
 
                 intersections.push(Pair(distance, cut_point, cut_point_deformed, gradients, offsets));
-                
             }
         }
         Vector3a dx_direction = Vector3a::Zero();
@@ -364,8 +376,9 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
             Eigen::Vector<int, 6> offset_p1 = p1.offset_maps_xij;
             Eigen::Vector<int, 6> offset_p2 = p2.offset_maps_xij;
             for(int i = 0; i < 6; ++i){
-                dx_gradients_wrt_x[offset_p1(i)] += p1.gradient_wrt_xij.row(i)*gaussian_kernel(distance);
-                dx_gradients_wrt_x[offset_p2(i)] -= p2.gradient_wrt_xij.row(i)*gaussian_kernel(distance);
+                // if(offset_p1(i) == 163) std::cout << p1.gradient_wrt_xij.row(i) << std::endl;
+                dx_gradients_wrt_x[offset_p1(i)] += p1.gradient_wrt_xij.row(i).transpose()*gaussian_kernel(distance);
+                dx_gradients_wrt_x[offset_p2(i)] -= p2.gradient_wrt_xij.row(i).transpose()*gaussian_kernel(distance);
             }
         }
         if(!cut){ 
@@ -390,16 +403,19 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
     } 
     MatrixXa A = A_dX.transpose();
     MatrixXa b = b_dx.transpose();
+    // std::cout << "b : \n"<< b.transpose() << std::endl;
     Matrix3a x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
     auto F = x.transpose();
     // assume constant thickness of the material 
-    // if(F(2,2) == 0.) F(2,2) = 1;
+    if(F(2,2) == 0.) F(2,2) = 1;
+    eval_info_of_sample.F = F;
 
     eval_info_of_sample.F_gradients_wrt_x = std::vector<Matrix3a>(deformed_states.rows());
     for(int i = 0; i < deformed_states.rows(); ++i){
         MatrixXa diff_b_i = diff_b_dx[i].transpose();
         Matrix3a x_i = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
         eval_info_of_sample.F_gradients_wrt_x[i] = x_i.transpose();
+        // if(i == 162) std::cout << "dFdx: \n"<< eval_info_of_sample.F_gradients_wrt_x[i] << std::endl;
     }
 
     return F;
@@ -408,8 +424,10 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
 MatrixXa MassSpring::getStrainGradientWrtx(){
     MatrixXa gradient(3, deformed_states.rows());
     for(int j = 0; j < deformed_states.rows(); ++j){
-        Matrix3a G = 0.5*(eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F_gradients_wrt_x[j] + eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F_gradients_wrt_x[j]);
+        Matrix3a G = 0.5*(eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F + eval_info_of_sample.F.transpose()*eval_info_of_sample.F_gradients_wrt_x[j]);
         gradient.col(j) = Vector3a{G(0,0), G(1,1), 2*G(1, 0)};
+        // if(j == 162) std::cout << "G: \n" << G << std::endl;
+        // if(j == 162) std::cout << "g: \n" << gradient.col(j).transpose() << std::endl;
     }
     return gradient;
 }    

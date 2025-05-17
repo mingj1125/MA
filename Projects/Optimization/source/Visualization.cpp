@@ -179,6 +179,7 @@ void Visualization::sceneCallback(){
             else psMesh->addFaceScalarQuantity("Young's modulus", params_from_file);
             scene->simulateWithParameter(params_from_file, stretch_type);
         }  else {
+                scene->parameters = scene->get_initial_params();
                 scene->simulateWithParameter(scene->get_initial_params(), stretch_type);
         }
 
