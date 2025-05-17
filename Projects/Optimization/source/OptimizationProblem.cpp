@@ -525,10 +525,10 @@ void OptimizationProblem::TestOptimizationSensitivity(){
 	int test_size = 10; 
     VectorXa errors(test_size); 
 	// AScalar step = init_p(0)/100;
-	AScalar step = 0.01;
+	AScalar step = 0.005;
     MatrixXa delta_h(scene->num_test, x.rows()); delta_h.setZero();
 	Vector3a s; s.setConstant(step);
-	// delta_h(2, 54*3) = step;
+	// delta_h(2, 52*3) = step;
 	delta_h.col(52*3) = s;
     for(int i = 0; i < test_size; ++i){
 
@@ -545,7 +545,7 @@ void OptimizationProblem::TestOptimizationSensitivity(){
 		}
 	
 		AScalar energy = cost_function.ComputeEnergy();
-		std::cout << "energy: " << energy << std::endl; 
+		// std::cout << "energy: " << energy << std::endl; 
         
         errors(i) = std::abs(energy-obj_1);
     }

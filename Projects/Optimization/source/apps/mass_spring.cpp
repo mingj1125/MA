@@ -33,9 +33,9 @@ int main(){
     std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(sample_locs);
     p.objective_energies.push_back(e);
     // p.TestOptimizationGradient();
-    // p.TestOptimizationSensitivity();
+    p.TestOptimizationSensitivity();
     // if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";
-    if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    // if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
 
     return 0;
 }

@@ -46,7 +46,7 @@ public:
     std::vector<std::vector<int>> constraint_sims;
     std::vector<Eigen::SparseMatrix<AScalar>> hessian_sims;
     std::vector<Eigen::SparseMatrix<AScalar>> hessian_p_sims;
-    int num_directions = 4;
+    int num_directions = 16;
 
     int parameter_dof();
     int x_dof();

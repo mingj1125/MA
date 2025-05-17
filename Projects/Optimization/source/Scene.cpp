@@ -68,18 +68,12 @@ void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs,
             Matrix3a S = sim.findBestStressTensorviaProbing(sample_locs[l], line_directions);
             samples[l].t.col(i-1) = Vector3a({S(0,0), S(1,1), S(1,0)});
             samples[l].n.col(i-1) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
-            // std::cout << "S: " << samples[l].t.col(i-1).transpose() << std::endl;
-            // std::cout << "E: " << samples[l].n.col(i-1).transpose() << std::endl;
             for(int j = 0; j < (samples[l].t_diff).size(); ++j){
                 samples[l].t_diff[j].col(i-1) = sim.getStressGradientWrtParameter().col(j);
             }
             for(int j = 0; j < samples[l].n_diff_x.size(); ++j){
                samples[l].t_diff_x[j].col(i-1) = sim.getStressGradientWrtx().col(j);
                samples[l].n_diff_x[j].col(i-1) = sim.getStrainGradientWrtx().col(j);
-                // if(j == 162) {
-                //     std::cout << "dsdx: " << sim.getStressGradientWrtx().col(j).transpose() << std::endl;
-                //     std::cout << "dedx: " << sim.getStrainGradientWrtx().col(j).transpose() << std::endl;
-                // }
             }
         }
 
@@ -152,15 +146,12 @@ void Scene::CTensorPerturbx(std::vector<Vector3a> sample_locs,
             deformed_x_offset(i-1, coord) = 0;
         }
         sim.setDeformedState(deformed_x_offset.row(i-1).transpose()+get_deformed_nodes());
-        // std::cout << deformed_x_offset.row(i-1).transpose()+get_deformed_nodes() << std::endl;
 
         for(int l = 0; l < sample_locs.size(); ++l){
             Matrix3a E = sim.findBestStrainTensorviaProbing(sample_locs[l], line_directions);
             Matrix3a S = sim.findBestStressTensorviaProbing(sample_locs[l], line_directions);
             samples[l].t.col(i-1) = Vector3a({S(0,0), S(1,1), S(1,0)});
             samples[l].n.col(i-1) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
-            std::cout << "S: " << samples[l].t.col(i-1).transpose() << std::endl;
-            std::cout << "E: " << samples[l].n.col(i-1).transpose() << std::endl;
             for(int j = 0; j < (samples[l].t_diff).size(); ++j){
                 samples[l].t_diff[j].col(i-1) = sim.getStressGradientWrtParameter().col(j);
             }
@@ -215,7 +206,6 @@ void Scene::CTensorPerturbx(std::vector<Vector3a> sample_locs,
                 sample_Cs_info[l].C_diff_x_sim[i].col(k) =  (A.transpose()*A).ldlt().solve(A_diff_x_k_i.transpose()*b_k+A_k.transpose()*b_diff_x_k_i
                                                                 -(A_diff_x_k_i.transpose()*A_k+A_k.transpose()*A_diff_x_k_i)*sample_Cs_info[l].C_entry);
             }
-            // if(i == 162) std::cout << "dCdx: \n" << sample_Cs_info[l].C_diff_x_sim[i] << std::endl;
         }  
     }
 

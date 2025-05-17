@@ -52,7 +52,6 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
             gradient_t[j].col(i) = gradient_t_di[j];
         }
         for(int j = 0; j < gradient_t_wrt_x.size(); ++j){
-            // if(j == 162) std::cout << "x_temp: " << gradient_t_wrt_x_di[j].transpose() << std::endl;
             gradient_t_wrt_x[j].col(i) = gradient_t_wrt_x_di[j];
         }
     }
@@ -74,7 +73,6 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
             b_diff[j].segment(i*3, 3) = gradient_t[j].col(i);
         }
         for(int j = 0; j < deformed_states.rows(); ++j){
-            // if(j == 162) std::cout << "x_temp: " << gradient_t_wrt_x[j].col(i).transpose() << std::endl;
             b_diff_wrt_x[j].segment(i*3, 3) = gradient_t_wrt_x[j].col(i);
         }
     }
@@ -86,10 +84,7 @@ Matrix3a MassSpring::findBestStressTensorviaProbing(const Vector3a sample_loc, c
         eval_info_of_sample.stress_gradients_wrt_spring_thickness.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     for(int i = 0; i < deformed_states.rows(); i++){
-        // if(i == 162) std::cout << "x_temp: " << b_diff_wrt_x[i].transpose() << std::endl;
         VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b_diff_wrt_x[i]);
-        // AScalar epsilon = 1e-4;
-        // x = (x.array().abs() < epsilon).select(0.0, x);
         eval_info_of_sample.stress_gradients_wrt_x.col(i) = Vector3a({x(0), x(3), x(1)});
     }
     fitted_tensor << x(0), x(1), x(2), 
@@ -143,7 +138,6 @@ Vector3a MassSpring::computeWeightedStress(const Vector3a sample_loc, const Vect
         gradients_wrt_parameter[i] /= weight_sum;
     }
     for(int i = 0; i < deformed_states.rows(); i++){
-        // if(i == 162) std::cout << gradients_wrt_nodes[i].transpose() << std::endl;
         gradients_wrt_nodes[i] /= weight_sum;
     }
     // std::cout << weight_sum << std::endl;
@@ -333,8 +327,6 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
         for(auto spring: springs){
             AScalar cut_point_barys;
             if(lineCutRodinSegment(spring, sample_loc, direction, cut_point_barys)){
-                if(std::abs(cut_point_barys-1) < 1e-1) cut_point_barys = 1.0;
-                if(std::abs(cut_point_barys) < 1e-1) cut_point_barys = 0.0;
                 cut = true;
 
                 Vector3a xi, xj, Xi, Xj;
@@ -376,7 +368,6 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
             Eigen::Vector<int, 6> offset_p1 = p1.offset_maps_xij;
             Eigen::Vector<int, 6> offset_p2 = p2.offset_maps_xij;
             for(int i = 0; i < 6; ++i){
-                // if(offset_p1(i) == 163) std::cout << p1.gradient_wrt_xij.row(i) << std::endl;
                 dx_gradients_wrt_x[offset_p1(i)] += p1.gradient_wrt_xij.row(i).transpose()*gaussian_kernel(distance);
                 dx_gradients_wrt_x[offset_p2(i)] -= p2.gradient_wrt_xij.row(i).transpose()*gaussian_kernel(distance);
             }
@@ -403,7 +394,6 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
     } 
     MatrixXa A = A_dX.transpose();
     MatrixXa b = b_dx.transpose();
-    // std::cout << "b : \n"<< b.transpose() << std::endl;
     Matrix3a x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
     auto F = x.transpose();
     // assume constant thickness of the material 
@@ -415,7 +405,6 @@ Matrix3a MassSpring::computeWeightedDeformationGradient(const Vector3a sample_lo
         MatrixXa diff_b_i = diff_b_dx[i].transpose();
         Matrix3a x_i = (A.transpose()*A).ldlt().solve(A.transpose()*diff_b_i);
         eval_info_of_sample.F_gradients_wrt_x[i] = x_i.transpose();
-        // if(i == 162) std::cout << "dFdx: \n"<< eval_info_of_sample.F_gradients_wrt_x[i] << std::endl;
     }
 
     return F;
@@ -426,8 +415,6 @@ MatrixXa MassSpring::getStrainGradientWrtx(){
     for(int j = 0; j < deformed_states.rows(); ++j){
         Matrix3a G = 0.5*(eval_info_of_sample.F_gradients_wrt_x[j].transpose()*eval_info_of_sample.F + eval_info_of_sample.F.transpose()*eval_info_of_sample.F_gradients_wrt_x[j]);
         gradient.col(j) = Vector3a{G(0,0), G(1,1), 2*G(1, 0)};
-        // if(j == 162) std::cout << "G: \n" << G << std::endl;
-        // if(j == 162) std::cout << "g: \n" << gradient.col(j).transpose() << std::endl;
     }
     return gradient;
 }    

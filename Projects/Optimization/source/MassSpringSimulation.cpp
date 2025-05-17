@@ -113,7 +113,7 @@ void MassSpring::computeBoundingBox(Vector3a& top_right, Vector3a& bottom_left){
 
 void MassSpring::applyBoundaryStretch(int i, AScalar strain){
 
-    AScalar strain_apply = 1.1;
+    AScalar strain_apply = 1.15;
     if(strain > 0.) strain_apply = strain;
     switch (i)
     {
