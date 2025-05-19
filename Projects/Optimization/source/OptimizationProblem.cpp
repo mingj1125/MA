@@ -18,18 +18,18 @@ bool OptimizationProblem::Optimize()
 
 	OptimizationProblemCostFunction cost_function(this);
 
-	VectorXa parameters(x.rows()*2 + p.rows());
+	VectorXa parameters(x.rows()*2*scene->num_test + p.rows());
 	parameters.setZero();
-	parameters.segment(x.rows(), p.rows()) = p/p(0);
+	parameters.segment(x.rows()*scene->num_test, p.rows()) = p/p(0);
 
 	Eigen::SparseMatrix<AScalar> damp_matrix(parameters.rows(), parameters.rows());
 	for(int i=0; i<p.rows(); ++i)
-		damp_matrix.coeffRef(x.rows()+i, x.rows()+i) = 1.0;
+		damp_matrix.coeffRef(x.rows()*scene->num_test+i, x.rows()*scene->num_test+i) = 1.0;
 
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
-	options.damping = 5e-6;
-	options.global_stopping_criteria = 7e-3;
+	options.damping = 5e-3;
+	options.global_stopping_criteria = 5e-4;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
 	options.max_iterations = 300;
@@ -203,7 +203,7 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 1e-2;
+	options.initial_step_size = 1e1;
 	options.tolerance = 5e-4;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
@@ -215,6 +215,81 @@ bool OptimizationProblem::OptimizeGD()
 	out.close();	
     
 	return true;
+}
+
+bool OptimizationProblem::OptimizeGDFD()
+{
+	if(weights_p.rows() == 0)
+	{
+		weights_p = Eigen::SparseMatrix<AScalar>(p.rows(), p.rows());
+		for(int i=0; i<p.rows(); ++i)
+			weights_p.coeffRef(i,i) = p(0);
+	}
+
+	std::vector<AScalar> parameters(p.rows());
+	for(int i=0; i<p.rows(); ++i)
+		parameters[i] = p(i)/p(0);;	
+
+	OptimizationProblemCostFunctionFD cost_function(this);
+	GradientDescentOptions options;
+	options.initial_step_size = 1e1;
+	options.tolerance = 5e-4;
+	options.output_file = output_loc + "_gd_fd.log";
+	auto summary = GradientDescent<OptimizationProblemCostFunctionFD>(options, cost_function, parameters);
+	std::cout << summary.BriefReport() << "\n";
+	std::string op_result = output_loc + "_gd_fd_params.dat";
+	std::ofstream out(op_result);
+	for(int i=0; i<p.rows(); ++i)
+		out << parameters[i]*weights_p.coeffRef(i,i) << std::endl;
+	out.close();	
+    
+	return true;
+}
+
+bool OptimizationProblem::OptimizeFD()
+{
+	// so that the parameter is updated in its order of magnitude
+	if(weights_p.rows() == 0)
+	{
+		weights_p = Eigen::SparseMatrix<AScalar>(p.rows(), p.rows());
+		for(int i=0; i<p.rows(); ++i)
+			weights_p.coeffRef(i,i) = 1.0*p(0);
+	}
+
+	OptimizationProblemCostFunctionFD cost_function(this);
+
+	VectorXa parameters(p.rows());
+	parameters.setZero();
+	parameters = p/p(0);
+
+	Eigen::SparseMatrix<AScalar> damp_matrix(parameters.rows(), parameters.rows());
+	for(int i=0; i<p.rows(); ++i)
+		damp_matrix.coeffRef(i, i) = 1.0;
+
+	damped_newton_options options;
+	options.solver_type = DN_SOLVER_LU;
+	options.damping = 5;
+	options.global_stopping_criteria = 5e-4;
+	options.change_stopping_criteria = 1e-9;
+	options.damp_matrix = damp_matrix;
+	options.max_iterations = 300;
+	options.output_log = output_loc+"_fd";
+
+	DampedNewtonSolver solver;
+	solver.SetParameters(parameters);
+	solver.SetCostFunction(&cost_function);
+	solver.SetOptions(std::move(options));
+	damped_newton_result result = solver.Solve();
+
+	VectorXa opti_end_params = scene->parameters;
+    std::ofstream out_file(output_loc+"_fd_params.dat");
+    if (!out_file) {
+        std::cerr << "Error opening file for writing: " << output_loc << std::endl;
+    }
+    out_file << opti_end_params << "\n";
+    out_file.close();
+
+	return result.gradient < 1e-2;
 }
 
 OptimizationProblem::OptimizationProblem(Scene* scene_m, std::string out_m, std::string initial_file): scene(scene_m), output_loc(out_m){
@@ -255,39 +330,32 @@ AScalar OptimizationProblemCostFunction::ComputeEnergy()
 
 void OptimizationProblemCostFunction::UpdateSensitivities(){
 
-	dcdx = Eigen::SparseMatrix<AScalar>(data->x.rows(), data->x.rows()); dcdx.setZero();
-	dfdx = VectorXa(data->x.rows()); dfdx.setZero();
 	dfdp = VectorXa(data->full_p.rows()); dfdp.setZero();
-	dcdp = Eigen::SparseMatrix<AScalar>(data->x.rows(), data->full_p.rows()); dcdp.setZero();
-	d2fdx2 = Eigen::SparseMatrix<AScalar>(data->x.rows(), data->x.rows()); d2fdx2.setZero();
-	d2fdxp = Eigen::SparseMatrix<AScalar>(data->full_p.rows(), data->x.rows()); d2fdxp.setZero();
-	d2fdp2 = Eigen::SparseMatrix<AScalar>(data->full_p.rows(), data->full_p.rows()); d2fdp2.setZero();
+	Eigen::SparseMatrix<AScalar> d2fdx2 = Eigen::SparseMatrix<AScalar>(data->x.rows(), data->x.rows()); d2fdx2.setZero();
+	d2fdx2_sim = std::vector<Eigen::SparseMatrix<AScalar>>(data->scene->num_test, d2fdx2);
+	Eigen::SparseMatrix<AScalar> d2fdxp = Eigen::SparseMatrix<AScalar>(data->full_p.rows(), data->x.rows()); d2fdxp.setZero();
+	d2fdxp_sim = std::vector<Eigen::SparseMatrix<AScalar>>(data->scene->num_test, d2fdxp);
+	Eigen::SparseMatrix<AScalar> d2fdp2 = Eigen::SparseMatrix<AScalar>(data->full_p.rows(), data->full_p.rows()); d2fdp2.setZero();
+	d2fdp2_sim = std::vector<Eigen::SparseMatrix<AScalar>>(data->scene->num_test, d2fdp2);
 
 	dfdx_sim = VectorXa(data->x.rows()*data->scene->num_test); dfdx_sim.setZero();
 
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		dfdx_sim += data->objective_energies[i]->Compute_dfdx_sim(data->scene);
-		// Note that this is kinda ugly as Compute_dcdx setup a new simulation for constraints related modification (fixed dof)
-		dcdx += data->objective_energies[i]->Compute_dcdx(data->scene);
-		dcdp += data->objective_energies[i]->Compute_dcdp(data->scene) * data->weights_p;
-		dfdx += data->objective_energies[i]->Compute_dfdx(data->scene);
 		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
-		d2fdx2 += data->objective_energies[i]->Compute_d2fdx2(data->scene);
-		d2fdxp += data->objective_energies[i]->Compute_d2fdxp(data->scene) * data->weights_p;
-		d2fdp2 += data->weights_p.transpose() * data->objective_energies[i]->Compute_d2fdp2(data->scene) * data->weights_p;
-
+		for(int j=0; j< data->scene->num_test; ++j){
+			d2fdx2_sim[j] += data->objective_energies[i]->Compute_d2fdx2(data->scene)[j];
+			d2fdxp_sim[j] += data->objective_energies[i]->Compute_d2fdxp(data->scene)[j] * data->weights_p;
+			d2fdp2_sim[j] += data->weights_p.transpose() * data->objective_energies[i]->Compute_d2fdp2(data->scene)[j] * data->weights_p;
+		}
 	}
-	// std::cout << "A: " << d2fdx2.norm() << std::endl;
-	// // // std::cout << "dfdx norm: " << dfdx.norm() << std::endl;
-	// std::cout << "B: " << d2fdxp.norm() << std::endl;
-	// std::cout << "C: " << d2fdp2.norm() << std::endl;
 
 }
 
 VectorXa OptimizationProblemCostFunction::ComputeGradient()
 {
-	VectorXa gradient(data->x.rows()*2+data->p.rows()); gradient.setZero();
+	VectorXa gradient(data->x.rows()*2*data->scene->num_test+data->p.rows()); gradient.setZero();
 
 	VectorXa sum(data->p.rows()); sum.setZero();
 	for(int i = 0; i < data->scene->num_test; ++i){
@@ -296,7 +364,7 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 		sum += (data->scene->hessian_p_sims[i]* data->weights_p).transpose() * dd_sim;
 	}
 
-	gradient.segment(data->x.rows(), data->p.rows()) = dfdp-sum;
+	gradient.segment(data->x.rows()*data->scene->num_test, data->p.rows()) = dfdp-sum;
 	std::cout << "simulation gradient: " << sum.norm() << std::endl;
 	std::cout << "param gradient: " << dfdp.norm() << std::endl;
 
@@ -305,43 +373,47 @@ VectorXa OptimizationProblemCostFunction::ComputeGradient()
 
 Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunction::ComputeHessian()
 {
-	Eigen::SparseMatrix<AScalar> hessian(data->x.rows()*2 + data->p.rows(), data->x.rows()*2 + data->p.rows());
+	Eigen::SparseMatrix<AScalar> hessian(data->x.rows()*2*data->scene->num_test + data->p.rows(), data->x.rows()*2*data->scene->num_test + data->p.rows());
 
 	std::vector<Eigen::Triplet<AScalar>> triplets;
+	for(int test = 0; test < data->scene->num_test; ++test){
+		std::vector<Eigen::Triplet<AScalar> > A = SparseMatrixToTriplets(d2fdx2_sim[test]);
+		std::vector<Eigen::Triplet<AScalar> > B = SparseMatrixToTriplets(d2fdxp_sim[test]);
+		std::vector<Eigen::Triplet<AScalar> > C = SparseMatrixToTriplets(d2fdp2_sim[test]);
+		std::vector<Eigen::Triplet<AScalar> > dcdx_t = SparseMatrixToTriplets(data->scene->hessian_sims[test]);
+		std::vector<Eigen::Triplet<AScalar> > dcdp_t = SparseMatrixToTriplets(data->scene->hessian_p_sims[test]* data->weights_p);
 
-	std::vector<Eigen::Triplet<AScalar> > A = SparseMatrixToTriplets(d2fdx2);
-	std::vector<Eigen::Triplet<AScalar> > B = SparseMatrixToTriplets(d2fdxp.transpose());
-	std::vector<Eigen::Triplet<AScalar> > C = SparseMatrixToTriplets(d2fdp2);
-	std::vector<Eigen::Triplet<AScalar> > dcdx_t = SparseMatrixToTriplets(dcdx);
-	std::vector<Eigen::Triplet<AScalar> > dcdp_t = SparseMatrixToTriplets(dcdp);
+		int x_dim = data->x.rows();
 
-	triplets = A;
+		for(int i=0; i<A.size(); ++i){
+			triplets.push_back(Eigen::Triplet<AScalar>(test*x_dim+A[i].row(), test*x_dim+A[i].col(), A[i].value()));
+		}
 
-	int ob_col = data->x.rows();
-	for(int i=0; i<B.size(); ++i)
-	{
-		triplets.push_back(Eigen::Triplet<AScalar>(ob_col+B[i].col(), B[i].row(),        B[i].value())); //Bt
-		triplets.push_back(Eigen::Triplet<AScalar>(B[i].row(), 		  ob_col+B[i].col(), B[i].value())); //B
-	}
+		int ob_col = data->x.rows()*data->scene->num_test;
+		for(int i=0; i<B.size(); ++i)
+		{
+			triplets.push_back(Eigen::Triplet<AScalar>(ob_col+B[i].row(), test*x_dim+B[i].col(),        B[i].value())); //B
+			triplets.push_back(Eigen::Triplet<AScalar>(test*x_dim+B[i].col(), 		 ob_col+B[i].row(), B[i].value())); //Bt
+		}
+		int odcdx_row = data->x.rows()*data->scene->num_test + data->p.rows();
+		for(int i=0; i<dcdx_t.size(); ++i)
+		{
+			triplets.push_back(Eigen::Triplet<AScalar>(odcdx_row+test*x_dim+dcdx_t[i].row(), test*x_dim+dcdx_t[i].col(),           dcdx_t[i].value())); //dcdx
+			triplets.push_back(Eigen::Triplet<AScalar>(test*x_dim+dcdx_t[i].col(),           test*x_dim+odcdx_row+dcdx_t[i].row(), dcdx_t[i].value())); //dcdxt
+		}
+		int odcdp_row = data->x.rows()*data->scene->num_test+data->p.rows();
+		int odcdp_col = data->x.rows()*data->scene->num_test;
+		for(int i=0; i<dcdp_t.size(); ++i)
+		{
+			triplets.push_back(Eigen::Triplet<AScalar>(odcdp_row+test*x_dim+dcdp_t[i].row(), odcdp_col+dcdp_t[i].col(), dcdp_t[i].value())); //dcdp
+			triplets.push_back(Eigen::Triplet<AScalar>(odcdp_col+dcdp_t[i].col(), odcdp_row+test*x_dim+dcdp_t[i].row(), dcdp_t[i].value())); //dcdpt
+		}
 
-	int oc_col = data->x.rows();
-	int oc_row = data->x.rows();
-	for(int i=0; i<C.size(); ++i)
-		triplets.push_back(Eigen::Triplet<AScalar>(oc_row+C[i].row(), oc_row+C[i].col(), C[i].value())); //C
-	
-	int odcdx_row = data->x.rows() + data->p.rows();
-	for(int i=0; i<dcdx_t.size(); ++i)
-	{
-		triplets.push_back(Eigen::Triplet<AScalar>(odcdx_row+dcdx_t[i].row(), dcdx_t[i].col(),           dcdx_t[i].value())); //dcdx
-		triplets.push_back(Eigen::Triplet<AScalar>(dcdx_t[i].col(),           odcdx_row+dcdx_t[i].row(), dcdx_t[i].value())); //dcdxt
-	}
-
-	int odcdp_row = data->x.rows()+data->p.rows();
-	int odcdp_col = data->x.rows();
-	for(int i=0; i<dcdp_t.size(); ++i)
-	{
-		triplets.push_back(Eigen::Triplet<AScalar>(odcdp_row+dcdp_t[i].row(), odcdp_col+dcdp_t[i].col(), dcdp_t[i].value())); //dcdp
-		triplets.push_back(Eigen::Triplet<AScalar>(odcdp_col+dcdp_t[i].col(), odcdp_row+dcdp_t[i].row(), dcdp_t[i].value())); //dcdpt
+		int oc_col = data->x.rows()*data->scene->num_test;
+		int oc_row = data->x.rows()*data->scene->num_test;
+		for(int i=0; i<C.size(); ++i){
+			triplets.push_back(Eigen::Triplet<AScalar>(oc_row+C[i].row(), oc_row+C[i].col(), C[i].value())); //C
+		}
 	}
 
 	hessian.setFromTriplets(triplets.begin(), triplets.end());
@@ -371,14 +443,14 @@ OptimizationProblemCostFunction::OptimizationProblemCostFunction(OptimizationPro
 void OptimizationProblemCostFunction::TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters)
 {
 	new_parameters = prev_parameters + step;
-	std::cout << "residual on rest 0: " << step.segment(0, data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
-	std::cout << "residual on rest 1: " << step.segment(data->x.rows(), data->p.rows()).lpNorm<Eigen::Infinity>() << std::endl;
-	std::cout << "residual on rest 2: " << step.segment(data->x.rows() + data->p.rows(), data->x.rows()).lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "residual on rest 0: " << step.segment(0, data->x.rows()*data->scene->num_test).lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "residual on rest 1: " << step.segment(data->x.rows()*data->scene->num_test, data->p.rows()).lpNorm<Eigen::Infinity>() << std::endl;
+	std::cout << "residual on rest 2: " << step.segment(data->x.rows()*data->scene->num_test + data->p.rows(), data->x.rows()*data->scene->num_test).lpNorm<Eigen::Infinity>() << std::endl;
 }
 
 cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parameters)
 {
-	data->p = parameters.segment(data->x.rows(), data->p.rows());
+	data->p = parameters.segment(data->x.rows()*data->scene->num_test, data->p.rows());
 
 	data->full_p = data->weights_p*data->p;
 
@@ -417,7 +489,7 @@ void OptimizationProblemCostFunction::AcceptStep()
 
 void OptimizationProblemCostFunction::Finalize(const VectorXa& parameters)
 {
-	data->p = parameters.segment(data->x.rows(), data->p.rows()).cwiseMax(data->cut_lower_bound);
+	data->p = parameters.segment(data->x.rows()*data->scene->num_test, data->p.rows()).cwiseMax(data->cut_lower_bound);
 }
 
 void OptimizationProblem::TestOptimizationGradient(){
@@ -428,14 +500,14 @@ void OptimizationProblem::TestOptimizationGradient(){
 		for(int i=0; i<p.rows(); ++i)
 			weights_p.coeffRef(i,i) = p(0); //1.0;
 	}
-	VectorXa parameters(x.rows()*2 + p.rows());
+	VectorXa parameters(x.rows()*2*scene->num_test + p.rows());
 	parameters.setZero();
 
 	OptimizationProblemCostFunction cost_function(this);
 
 	std::cout << std::endl << std::endl;
 	std::cout << "<---------------------------------- TESTING GRADIENT ----------------------------------> " << std::endl;
-	parameters.segment(x.rows(), p.rows()) = p/p(0);
+	parameters.segment(x.rows()*scene->num_test, p.rows()) = p/p(0);
 	VectorXa init_p = p/p(0);
 	AScalar cost;
 	VectorXa gradient;
@@ -444,13 +516,12 @@ void OptimizationProblem::TestOptimizationGradient(){
 
 	int test_size = 10; 
     VectorXa errors(test_size); 
-	// AScalar step = init_p(0)/100;
 	AScalar step = 10;
     VectorXa delta_h(p.rows()); delta_h.setConstant(step);
     for(int i = 0; i < test_size; ++i){
 
-        AScalar obj_1 = cost + (gradient.segment(x.rows(), p.rows())).transpose() * (delta_h/std::pow(2, i));
-        parameters.segment(x.rows(), p.rows()) = init_p + delta_h/std::pow(2, i);
+        AScalar obj_1 = cost + (gradient.segment(x.rows()*scene->num_test, p.rows())).transpose() * (delta_h/std::pow(2, i));
+        parameters.segment(x.rows()*scene->num_test, p.rows()) = init_p + delta_h/std::pow(2, i);
 		AScalar cost_fd;
 		VectorXa gradient_fd;
 		Eigen::SparseMatrix<AScalar> hessian_fd;
@@ -471,14 +542,14 @@ void OptimizationProblem::ShowEnergyLandscape(){
 		for(int i=0; i<p.rows(); ++i)
 			weights_p.coeffRef(i,i) = p(0); //1.0;
 	}
-	VectorXa parameters(x.rows()*2 + p.rows());
+	VectorXa parameters(x.rows()*2*scene->num_test + p.rows());
 	parameters.setZero();
 
 	OptimizationProblemCostFunction cost_function(this);
 
 	std::cout << std::endl;
 	std::cout << "<---------------------------------- Energy Landscape ----------------------------------> " << std::endl;
-	parameters.segment(x.rows(), p.rows()) = p/p(0);
+	parameters.segment(x.rows()*scene->num_test, p.rows()) = p/p(0);
 	VectorXa init_p = p/p(0);
 	AScalar cost;
 	VectorXa gradient;
@@ -492,7 +563,7 @@ void OptimizationProblem::ShowEnergyLandscape(){
     VectorXa delta_h(p.rows()); delta_h.setConstant(step);
     for(int i = -test_size; i < test_size; ++i){
 
-        parameters.segment(x.rows(), p.rows()) = init_p + delta_h * i;
+        parameters.segment(x.rows()*scene->num_test, p.rows()) = init_p + delta_h * i;
 		AScalar cost_fd;
 		VectorXa gradient_fd;
 		Eigen::SparseMatrix<AScalar> hessian_fd;
@@ -510,13 +581,13 @@ void OptimizationProblem::TestOptimizationSensitivity(){
 		for(int i=0; i<p.rows(); ++i)
 			weights_p.coeffRef(i,i) = p(0); //1.0;
 	}
-	VectorXa parameters(x.rows()*2 + p.rows());
+	VectorXa parameters(x.rows()*2*scene->num_test + p.rows());
 	parameters.setZero();
 
 	OptimizationProblemCostFunction cost_function(this);
 	std::cout << std::endl;
 	std::cout << "<---------------------------------- Sensitivity for Objective ----------------------------------> " << std::endl;
-	parameters.segment(x.rows(), p.rows()) = p/p(0);
+	parameters.segment(x.rows()*scene->num_test, p.rows()) = p/p(0);
 	AScalar cost;
 	VectorXa gradient;
 	Eigen::SparseMatrix<AScalar> hessian;
@@ -526,10 +597,11 @@ void OptimizationProblem::TestOptimizationSensitivity(){
     VectorXa errors(test_size); 
 	// AScalar step = init_p(0)/100;
 	AScalar step = 0.005;
-    MatrixXa delta_h(scene->num_test, x.rows()); delta_h.setZero();
+    MatrixXa delta_h(scene->num_test, x.rows()); delta_h.setZero(); 
+	// delta_h.row(0).setConstant(step);
 	Vector3a s; s.setConstant(step);
 	// delta_h(2, 52*3) = step;
-	delta_h.col(52*3) = s;
+	delta_h.col(167*3) = s;
     for(int i = 0; i < test_size; ++i){
 
 		AScalar correction = ((cost_function.dfdx_sim).segment(0, x.rows())).transpose() * (delta_h.row(0).transpose()/std::pow(2, i));
@@ -598,7 +670,6 @@ VectorXa OptimizationProblemCostFunctionCeres::ComputeGradient() const
 		Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar>> solver_sim(data->scene->hessian_sims[i]);
 		VectorXa dd_sim = solver_sim.solve(dfdx_sim.segment(data->x.rows()*i, data->x.rows()));
 		sum += (data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim;
-		// std::cout << "sim " << i << " gradient : " << ((data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim).norm() << std::endl;
 	}
 
 	std::cout << "simulation gradient: " << sum.norm() << std::endl;
@@ -649,4 +720,227 @@ bool OptimizationProblemCostFunctionCeres::Evaluate(double* parameters, double* 
 int OptimizationProblemCostFunctionCeres::NumParameters() const
 {
 	return data->p.rows();
+}
+
+AScalar OptimizationProblemCostFunctionFD::ComputeEnergy() const
+{
+	AScalar energy = 0;
+
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		AScalar energy_ele = data->objective_energies[i]->ComputeEnergy(data->scene);
+		// std::cout << "Energy " << i << ": " << energy_ele << std::endl;
+		energy += energy_ele;
+	}
+
+	return energy;
+}
+
+VectorXa OptimizationProblemCostFunctionFD::ComputeGradient() const
+{	
+	// VectorXa gradient(data->p.rows()); gradient.setZero();
+	// AScalar delta = 0.001;
+	// for(int i = 0; i < data->p.rows(); ++i){
+	// 	data->p(i) += delta;
+	// 	data->full_p = data->weights_p*data->p;
+	// 	data->scene->parameters = data->full_p;
+	// 	for(int j=0; j<data->objective_energies.size(); ++j)
+	// 	{
+	// 		data->objective_energies[j]->SimulateAndCollect(data->scene);
+	// 	}
+	// 	AScalar energy_plus = ComputeEnergy();
+	// 	data->p(i) -= 2*delta;
+	// 	data->full_p = data->weights_p*data->p;
+	// 	data->scene->parameters = data->full_p;
+	// 	for(int j=0; j<data->objective_energies.size(); ++j)
+	// 	{
+	// 		data->objective_energies[j]->SimulateAndCollect(data->scene);
+	// 	}
+	// 	AScalar energy_minus = ComputeEnergy();
+	// 	gradient(i) = (energy_plus-energy_minus)/(2*delta);
+	// 	data->p(i) += delta;
+	// 	if(i % 100 == 0) std::cout << "gradient # " << i << " computed\n";
+	// }
+
+	VectorXa dfdp(data->full_p.rows()); dfdp.setZero();
+	VectorXa dfdx_sim = VectorXa(data->x.rows()*data->scene->num_test); dfdx_sim.setZero();
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{	
+		dfdx_sim += data->objective_energies[i]->Compute_dfdx_sim(data->scene);
+		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
+	}
+	VectorXa gradient(data->p.rows()); gradient.setZero();
+
+	VectorXa sum(data->p.rows()); sum.setZero();
+	for(int i = 0; i < data->scene->num_test; ++i){
+		Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar>> solver_sim(data->scene->hessian_sims[i]);
+		VectorXa dd_sim = solver_sim.solve(dfdx_sim.segment(data->x.rows()*i, data->x.rows()));
+		sum += (data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim;
+	}
+
+	std::cout << "simulation gradient: " << sum.norm() << std::endl;
+	std::cout << "param gradient: " << dfdp.norm() << std::endl;
+
+	gradient = dfdp-sum;
+
+	return gradient;
+}
+
+Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunctionFD::ComputeHessian()
+{	
+	if(hessian_0.norm() > 0) return hessian_0;
+	MatrixXa hessian(data->full_p.rows(), data->full_p.rows()); hessian.setZero();
+	AScalar delta = 0.0001;
+	for(int i = 0; i < data->p.rows(); ++i){
+		data->p(i) += delta;
+		data->full_p = data->weights_p*data->p;
+		data->scene->parameters = data->full_p;
+		for(int j=0; j<data->objective_energies.size(); ++j)
+		{
+			data->objective_energies[j]->SimulateAndCollect(data->scene);
+		}
+		VectorXa dfdp(data->full_p.rows()); dfdp.setZero();
+		VectorXa dfdx_sim = VectorXa(data->x.rows()*data->scene->num_test); dfdx_sim.setZero();
+		for(int i=0; i<data->objective_energies.size(); ++i)
+		{	
+			dfdx_sim += data->objective_energies[i]->Compute_dfdx_sim(data->scene);
+			dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
+		}
+		VectorXa gradient_plus(data->p.rows()); gradient_plus.setZero();
+
+		VectorXa sum(data->p.rows()); sum.setZero();
+		for(int i = 0; i < data->scene->num_test; ++i){
+			Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar>> solver_sim(data->scene->hessian_sims[i]);
+			VectorXa dd_sim = solver_sim.solve(dfdx_sim.segment(data->x.rows()*i, data->x.rows()));
+			sum += (data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim;
+		}
+
+		std::cout << "simulation gradient_plus: " << sum.norm() << std::endl;
+		std::cout << "param gradient_plus: " << dfdp.norm() << std::endl;
+
+		gradient_plus = dfdp-sum;
+
+		data->p(i) -= 2*delta;
+		data->full_p = data->weights_p*data->p;
+		data->scene->parameters = data->full_p;
+		for(int j=0; j<data->objective_energies.size(); ++j)
+		{
+			data->objective_energies[j]->SimulateAndCollect(data->scene);
+		}
+		dfdp.setZero();
+		dfdx_sim.setZero();
+		for(int i=0; i<data->objective_energies.size(); ++i)
+		{	
+			dfdx_sim += data->objective_energies[i]->Compute_dfdx_sim(data->scene);
+			dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
+		}
+		VectorXa gradient_minus(data->p.rows()); gradient_minus.setZero();
+
+		sum.setZero();
+		for(int i = 0; i < data->scene->num_test; ++i){
+			Eigen::CholmodSupernodalLLT<Eigen::SparseMatrix<AScalar>> solver_sim(data->scene->hessian_sims[i]);
+			VectorXa dd_sim = solver_sim.solve(dfdx_sim.segment(data->x.rows()*i, data->x.rows()));
+			sum += (data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim;
+		}
+
+		std::cout << "simulation gradient minus: " << sum.norm() << std::endl;
+		std::cout << "param gradient minus: " << dfdp.norm() << std::endl;
+
+		gradient_minus = dfdp-sum;
+
+		hessian.col(i) = (gradient_plus-gradient_minus)/(2*delta);
+		data->p(i) += delta;
+		if(i % 100 == 0) std::cout << "hessian col # " << i << " computed\n";
+	}
+	hessian_0 = hessian.sparseView();
+	return hessian.sparseView();
+}
+
+cost_evaluation OptimizationProblemCostFunctionFD::Evaluate(const VectorXa& parameters)
+{
+	data->p = parameters;
+
+	data->full_p = data->weights_p*data->p;
+
+	if(!data->check_if_valid_p(data->full_p))
+		throw std::exception();
+
+	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
+	data->scene->parameters = data->full_p;
+	// data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		data->objective_energies[i]->SimulateAndCollect(data->scene);
+	}
+	std::cout << "--------------------------------------------------------------------" << std::endl;
+
+	AScalar energy = ComputeEnergy();
+	VectorXa gradient = ComputeGradient();
+	Eigen::SparseMatrix<AScalar> hessian = ComputeHessian();
+
+	std::cout << "Sensitivities computed" << std::endl;
+
+	return std::tie(energy, gradient, hessian);
+}
+
+OptimizationProblemCostFunctionFD::OptimizationProblemCostFunctionFD(OptimizationProblem* data_m) : data(data_m)
+{
+	hessian_0.setZero();
+}
+
+bool OptimizationProblemCostFunctionFD::Evaluate(double* parameters, double* cost, double* gradient) const
+{
+	for(int i=0; i<data->p.rows(); ++i)
+		data->p[i] =  parameters[i];
+	
+	data->full_p = data->weights_p*data->p;
+
+	if(!data->check_if_valid_p(data->full_p))
+		return false;
+
+	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
+	data->scene->parameters = data->full_p;
+	// data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	for(int i=0; i<data->objective_energies.size(); ++i)
+	{
+		data->objective_energies[i]->SimulateAndCollect(data->scene);
+	}
+	std::cout << "--------------------------------------------------------------------" << std::endl;
+
+	AScalar energy = ComputeEnergy();
+	std::cout << "Computing gradient" << std::endl;
+	VectorXa gradient_e = ComputeGradient();
+	std::cout << "Done" << std::endl;
+
+	*cost = energy;
+
+	for(int i=0; i<gradient_e.rows(); ++i)
+		gradient[i] = gradient_e[i];
+
+	return true;
+}
+
+int OptimizationProblemCostFunctionFD::NumParameters() const
+{
+	return data->p.rows();
+}
+
+void OptimizationProblemCostFunctionFD::RejectStep()
+{
+	
+}
+
+void OptimizationProblemCostFunctionFD::AcceptStep()
+{
+	data->on_iteration_accept(data->full_p);
+}
+
+void OptimizationProblemCostFunctionFD::TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters)
+{
+	new_parameters = prev_parameters + step;
+}
+
+void OptimizationProblemCostFunctionFD::Finalize(const VectorXa& parameters)
+{
+	data->p = parameters;
 }

@@ -21,7 +21,7 @@ class LinearShell : public Simulation
     AScalar thickness = 0.0001;
     std::vector<int> fixed_vertices;
 
-    AScalar kernel_std = 0.02;
+    AScalar kernel_std = 0.2;
     std::vector<Matrix2a> strain_tensors_each_element;
     std::vector<Matrix2a> stress_tensors_each_element;
 

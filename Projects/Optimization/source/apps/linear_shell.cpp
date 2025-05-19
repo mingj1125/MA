@@ -8,12 +8,13 @@ int main(){
 
     LinearShell sim;
     Scene scene(sim);
+    // std::string mesh_name = "sun_mesh";
     std::string mesh_name = "grid_double_refined";
     scene.buildSceneFromMesh(mesh_name);
 
-    // Visualization vis(&scene);
-    // vis.initializeScene(false);
-    // vis.run();
+    Visualization vis(&scene);
+    vis.initializeScene(false);
+    vis.run();
 
     std::vector<Vector3a> sample_locs;
     sample_locs.push_back({0.76, 0.76, 0});
@@ -42,8 +43,10 @@ int main(){
     p.objective_energies.push_back(e);
     // p.TestOptimizationGradient();
     // p.TestOptimizationSensitivity();
-    // if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";
-    if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";
+    // if(!p.OptimizeGD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    // if(!p.OptimizeGDFD()) std::cout << "\n Gradient not converged to the set criterion \n";
+    // if(!p.OptimizeFD()) std::cout << "\n Gradient not converged to the set criterion \n";
     // p.ShowEnergyLandscape();
 
     return 0;

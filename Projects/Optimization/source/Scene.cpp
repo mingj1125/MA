@@ -197,7 +197,6 @@ void Scene::CTensorPerturbx(std::vector<Vector3a> sample_locs,
             sample_Cs_info[l].C_diff_p[i] =  (A.transpose()*A).ldlt().solve(A.transpose()*b_diff[i]);
         }
         for(int i = 0; i < samples[l].t_diff_x.size(); ++i){
-            sample_Cs_info[l].C_diff_x[i] =  (A.transpose()*A).ldlt().solve(A_diff_x[i].transpose()*b+A.transpose()*b_diff_x[i]-(A_diff_x[i].transpose()*A+A.transpose()*A_diff_x[i])*sample_Cs_info[l].C_entry);
             for(int k = 0; k < num_test; ++k){
                 MatrixXa A_diff_x_k_i = A_diff_x[i].block(k*3, 0, 3, 6);
                 Vector3a b_diff_x_k_i = b_diff_x[i].segment(k*3, 3);

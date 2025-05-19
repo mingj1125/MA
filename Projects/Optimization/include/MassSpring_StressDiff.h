@@ -64,4 +64,32 @@ Eigen::Matrix<AScalar, 3, 6> dtdx(AScalar Young, Vector6a X, Vector6a x, Vector3
     }
     return res;
 }
+
+Vector6a dbdx_inv(Vector6a x, Vector3a normal){
+    
+    Vector6a dbdx;
+    AScalar t1 = x[0] - x[3];
+    AScalar t2 = x[1] - x[4];
+    AScalar t3 = pow(t2, 0.2e1);
+    AScalar t4 = pow(t1, 0.2e1);
+    AScalar t5 = t4 + t3;
+    AScalar t6 = pow(t5, -0.3e1 / 0.2e1);
+    t5 = t5 * t6;
+    AScalar t7 = t2 * normal[1];
+    AScalar t8 = t1 * normal[0];
+    AScalar t9 = t5 * (t7 + t8);
+    AScalar t10 = std::abs(t9);
+    t1 = -t7 * t6 * t1 - t6 * t4 * normal[0] + t5 * normal[0];
+    t4 = std::abs(t9) / t9;
+    t2 = -t8 * t6 * t2 - t6 * t3 * normal[1] + t5 * normal[1];
+    t3 = pow(t10, -0.2e1);
+    dbdx[0] = -t3 * t1 * t4;
+    dbdx[1] = -t3 * t2 * t4;
+    dbdx[2] = 0;
+    dbdx[3] = t3 * t1 * t4;
+    dbdx[4] = t3 * t2 * t4;
+    dbdx[5] = 0;
+    return dbdx;
+}
+
 #endif

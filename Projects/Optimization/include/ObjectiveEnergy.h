@@ -11,13 +11,10 @@ private:
 public:
 
     virtual AScalar ComputeEnergy(Scene* scene){}
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdx(Scene* scene){}
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdp(Scene* scene){}
-    virtual VectorXa Compute_dfdx(Scene* scene){}
     virtual VectorXa Compute_dfdp(Scene* scene){}
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdx2(Scene* scene){}
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene){}
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene){}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdx2(Scene* scene){}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdxp(Scene* scene){}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdp2(Scene* scene){}
 
     virtual VectorXa Compute_dfdx_sim(Scene* scene){}
 
@@ -46,13 +43,10 @@ public:
     }
 
     virtual AScalar ComputeEnergy(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdx(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdp(Scene* scene);
-    virtual VectorXa Compute_dfdx(Scene* scene);
     virtual VectorXa Compute_dfdp(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdx2(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdx2(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdxp(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdp2(Scene* scene);
 
     virtual VectorXa Compute_dfdx_sim(Scene* scene);
 
@@ -68,7 +62,7 @@ public:
     // Vector<int, 6> consider_entry; // 1 if considered
     std::vector<Vector3a> target_locations;
     // std::vector<Eigen::Vector3d> directions;
-    AScalar ratio = 2;
+    AScalar ratio = 3;
 
 
     ApproximateStiffnessTensorRelationship(std::vector<Vector3a> target_locations_m){
@@ -76,13 +70,10 @@ public:
     }
 
     virtual AScalar ComputeEnergy(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdx(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_dcdp(Scene* scene);
-    virtual VectorXa Compute_dfdx(Scene* scene);
     virtual VectorXa Compute_dfdp(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdx2(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdxp(Scene* scene);
-    virtual Eigen::SparseMatrix<AScalar> Compute_d2fdp2(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdx2(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdxp(Scene* scene);
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdp2(Scene* scene);
 
     virtual VectorXa Compute_dfdx_sim(Scene* scene);
 

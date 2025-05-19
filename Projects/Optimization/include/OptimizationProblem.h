@@ -32,6 +32,8 @@ public:
     OptimizationProblem(Scene* scene_m, std::string out_m, std::string initial_file="");
 
 	bool OptimizeGD();
+	bool OptimizeGDFD();
+	bool OptimizeFD();
 
 	void TestOptimizationGradient();
 	void ShowEnergyLandscape();
@@ -43,14 +45,11 @@ class OptimizationProblemCostFunction : public CostFunction
 public:
 	OptimizationProblem* data;
 
-	Eigen::SparseMatrix<AScalar> d2fdx2;
-	Eigen::SparseMatrix<AScalar> d2fdxp;
-	Eigen::SparseMatrix<AScalar> d2fdp2;
-	Eigen::SparseMatrix<AScalar> dcdx;
-	Eigen::SparseMatrix<AScalar> dcdp;
-	VectorXa dfdx;
 	VectorXa dfdp;
 	VectorXa dfdx_sim;
+	std::vector<Eigen::SparseMatrix<AScalar>> d2fdx2_sim;
+	std::vector<Eigen::SparseMatrix<AScalar>> d2fdxp_sim;
+	std::vector<Eigen::SparseMatrix<AScalar>> d2fdp2_sim;
 
 	void UpdateSensitivities();
 
@@ -91,6 +90,32 @@ public:
 	OptimizationProblemCostFunctionCeres(OptimizationProblem* data_m);
 
 	bool Evaluate(double* parameters, double* cost, double* gradient) const;
+
+	int NumParameters() const;
+};
+
+class OptimizationProblemCostFunctionFD : public CostFunction
+{
+public:
+	OptimizationProblem* data;
+	Eigen::SparseMatrix<AScalar> hessian_0;
+
+	AScalar ComputeEnergy() const;
+	VectorXa ComputeGradient() const;
+	Eigen::SparseMatrix<AScalar> ComputeHessian();
+
+	OptimizationProblemCostFunctionFD(OptimizationProblem* data_m);
+
+	bool Evaluate(double* parameters, double* cost, double* gradient) const;
+	virtual cost_evaluation Evaluate(const VectorXa& parameters);
+
+	virtual void AcceptStep();
+
+	virtual void RejectStep();
+
+	virtual void TakeStep(const VectorXa& step, const VectorXa& prev_parameters, VectorXa& new_parameters);
+
+    virtual void Finalize(const VectorXa& parameters);
 
 	int NumParameters() const;
 };

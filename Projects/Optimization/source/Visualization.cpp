@@ -151,17 +151,19 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain yy", strain_yy);
     }
     // if(ImGui::InputInt("Stretch type", &stretch_type)){}
-    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::Checkbox("GD/SGN", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type)) 
+    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("GD/SGN/FD", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type)) 
     {
         if(optimized){
             VectorXa params_from_file(scene->parameter_dof());
             std::string filename;
             if(network_visual){
-                if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_gd_params.dat";
-                else filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_sgn_params.dat";
+                if(gradient_descent == 1) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_gd_params.dat";
+                else if(gradient_descent == 2) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_sgn_params.dat";
+                else if(gradient_descent == 3) filename= "../../../Projects/Optimization/optimization_output/"+scene->mesh_name+"_fd_params.dat";
             } else {
-                if(gradient_descent) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_gd_params.dat";
-                else filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_sgn_params.dat";
+                if(gradient_descent == 1) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_gd_params.dat";
+                else if(gradient_descent == 2) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_sgn_params.dat";
+                else if(gradient_descent == 3) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_fd_params.dat";
             }
             std::ifstream in_file(filename);
             if (!in_file) {

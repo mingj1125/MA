@@ -185,13 +185,15 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
     xj = deformed_states.segment(node_j*3, 3);
     Xi = rest_states.segment(node_i*3, 3);
     Xj = rest_states.segment(node_j*3, 3);
+    Vector3a n1 = (xj - xi).normalized();
 
-    AScalar b = spring->width;
+    AScalar b = spring->width / std::abs(n1.dot(normal));
+    Vector6a x_con; x_con.segment<3>(0) = xi; x_con.segment<3>(3) = xj; 
+    Vector6a dbdx_o = spring->width * dbdx_inv(x_con, normal);
     Vector3a gradient_wrt_thickness_local; gradient_wrt_thickness_local.setZero();
     for (int i = 0; i <= n; ++i) {
         AScalar x = -b + 2.0 * b * i / n;
         AScalar l = (xi-xj).norm(); AScalar L0 = (Xi-Xj).norm();
-        Vector3a n1 = (xj - xi).normalized();
         AScalar lambda1 = l/L0;
         AScalar strain = 0.5*(l*l/(L0*L0)-1);
         AScalar stress = strain * spring->YoungsModulus;
@@ -199,18 +201,27 @@ Vector3a MassSpring::integrateOverCrossSection(Spring* spring, const Vector3a no
         AScalar kernel = gaussian_kernel(center_line_distance_to_sample+x);
 
         integral += kernel * f_val;
-        gradient_wrt_thickness_local += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b;
+        gradient_wrt_thickness_local += kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b/std::abs(n1.dot(normal));
         weights += kernel;
 
         Eigen::Matrix<AScalar, 18, 1> diff_traction = tGradientWrtx(spring, normal);
-        integral_diff_traction += kernel * diff_traction;
+        Eigen::Matrix<AScalar, 18, 1> diff_kernel_x;
+        for(int j = 0; j < 6; ++j){
+            diff_kernel_x.block(j*3, 0, 3, 1) = kernel * f_val*(-(center_line_distance_to_sample+x))/kernel_std/kernel_std*x/b*dbdx_o(j);
+        }
+        integral_diff_traction += kernel * diff_traction + diff_kernel_x;
     }
 
     integral *= 2.0 * b / n;
     weights *= 2.0 * b / n;
     integral_diff_traction *= 2.0 * b / n;
+    Eigen::Matrix<AScalar, 18, 1> diff_kernel_x;
+    for(int j = 0; j < 6; ++j){
+        diff_kernel_x.block(j*3, 0, 3, 1) = integral/b*dbdx_o(j);
+    }
+    integral_diff_traction += diff_kernel_x;
     gradient_wrt_thickness_local *= 2.0 * b / n;
-    gradient_wrt_thickness += integral/b + gradient_wrt_thickness_local;
+    gradient_wrt_thickness += integral/b/std::abs(n1.dot(normal)) + gradient_wrt_thickness_local;
     // std::cout << "Weights in spring: " << weights << std::endl;
 
     int offset_i = spring->p1;
