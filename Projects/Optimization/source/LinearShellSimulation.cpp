@@ -58,7 +58,7 @@ void LinearShell::applyBoundaryStretch(int i, AScalar strain){
         stretchX(strain_apply);
         break;  
     case 3:
-        stretchShear(1.00005);
+        stretchShear(1.5);
         break;          
     default:
         break;
@@ -89,8 +89,8 @@ void LinearShell::stretchX(AScalar strain){
             deformed_states(3*i) = X(0)*strain;
             ++count;
         }
+        fixed_vertices.push_back(i*3+2);
     }
-    // std::cout << count << std::endl;
 }
 
 void LinearShell::stretchY(AScalar strain){
@@ -114,6 +114,7 @@ void LinearShell::stretchY(AScalar strain){
 
             deformed_states(3*i+1, 0) = X(1,0)*strain;
         }
+        fixed_vertices.push_back(i*3+2);
     }
 }
 
@@ -136,6 +137,7 @@ void LinearShell::stretchSlidingY(AScalar strain){
 
             deformed_states(3*i+1, 0) = X(1,0)*strain;
         }
+        fixed_vertices.push_back(i*3+2);
     }
 }
 
@@ -158,6 +160,7 @@ void LinearShell::stretchSlidingX(AScalar strain){
 
             deformed_states(3*i, 0) = X(0,0)*strain;
         }
+        fixed_vertices.push_back(i*3+2);
     }
 }
 
@@ -197,6 +200,7 @@ void LinearShell::stretchShear(AScalar strain){
             deformed_states(3*i+1) = X(1)+strain-1;
             deformed_states(3*i) = X(0)+strain-1;
         }
+        fixed_vertices.push_back(i*3+2);
     }
 }
 
@@ -220,6 +224,7 @@ void LinearShell::stretchDiagonal(AScalar strain){
             deformed_states(3*i+1, 0) = X(1,0)*strain + 0.001;
             deformed_states(3*i, 0) = X(0,0)*strain;
         }
+        fixed_vertices.push_back(i*3+2);
     }
 }
 
@@ -444,8 +449,8 @@ void LinearShell::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
         }
 
         AScalar E = youngsmodulus_each_element(i);
-        AScalar lambda = E * nu /((1+nu)*(1-2*nu));
-        AScalar mu = E / (2*(1+nu));
+        AScalar lambda = E * nu /((1.0+nu)*(1.0-2.0*nu));
+        AScalar mu = E / (2.0*(1.0+nu));
 
         Matrix9a J = PlanarStVenantKirchhoffHessianImpl_(q, p, thickness, lambda, mu);
 
@@ -492,8 +497,8 @@ void LinearShell::build_sim_hessian(Eigen::SparseMatrix<AScalar>& K){
         }
 
         AScalar E = youngsmodulus_each_element(i);
-        AScalar lambda = E * nu /((1+nu)*(1-2*nu));
-        AScalar mu = E / (2*(1+nu));
+        AScalar lambda = E * nu /((1.0+nu)*(1.0-2.0*nu));
+        AScalar mu = E / (2.0*(1.0+nu));
 
         Matrix9a J = PlanarStVenantKirchhoffHessianImpl_(q, p, thickness, lambda, mu);
 
@@ -508,13 +513,11 @@ void LinearShell::build_sim_hessian(Eigen::SparseMatrix<AScalar>& K){
 
     K.setFromTriplets(triplets.begin(), triplets.end());
 
-    std::vector<Eigen::Triplet<AScalar>> triplets_k = SparseMatrixToTriplets(K);
-
-    for(int i=0; i<triplets_k.size(); ++i)
+    for(int i=0; i<triplets.size(); ++i)
     {
-    	if(std::isnan(triplets_k[i].value()))
+    	if(std::isnan(triplets[i].value()))
         {
-            std::cout << triplets_k[i].row() << " " << triplets_k[i].col() << " is nan" << std::endl;
+            std::cout << triplets[i].row() << " " << triplets[i].col() << " is nan" << std::endl;
     		throw std::exception();
         }
     }

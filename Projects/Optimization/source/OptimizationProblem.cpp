@@ -600,8 +600,8 @@ void OptimizationProblem::TestOptimizationSensitivity(){
     MatrixXa delta_h(scene->num_test, x.rows()); delta_h.setZero(); 
 	// delta_h.row(0).setConstant(step);
 	Vector3a s; s.setConstant(step);
-	// delta_h(2, 52*3) = step;
-	delta_h.col(167*3) = s;
+	// delta_h(2, 33*3) = step;
+	delta_h.col(33*3) = s;
     for(int i = 0; i < test_size; ++i){
 
 		AScalar correction = ((cost_function.dfdx_sim).segment(0, x.rows())).transpose() * (delta_h.row(0).transpose()/std::pow(2, i));
@@ -788,7 +788,7 @@ VectorXa OptimizationProblemCostFunctionFD::ComputeGradient() const
 
 Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunctionFD::ComputeHessian()
 {	
-	if(hessian_0.norm() > 0) return hessian_0;
+	// if(hessian_0.norm() > 0) return hessian_0;
 	MatrixXa hessian(data->full_p.rows(), data->full_p.rows()); hessian.setZero();
 	AScalar delta = 0.0001;
 	for(int i = 0; i < data->p.rows(); ++i){
@@ -815,8 +815,8 @@ Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunctionFD::ComputeHessian()
 			sum += (data->scene->hessian_p_sims[i] * data->weights_p).transpose() * dd_sim;
 		}
 
-		std::cout << "simulation gradient_plus: " << sum.norm() << std::endl;
-		std::cout << "param gradient_plus: " << dfdp.norm() << std::endl;
+		std::cout << "simulation gradient plus: " << sum.norm() << std::endl;
+		std::cout << "param gradient plus: " << dfdp.norm() << std::endl;
 
 		gradient_plus = dfdp-sum;
 
@@ -852,7 +852,7 @@ Eigen::SparseMatrix<AScalar> OptimizationProblemCostFunctionFD::ComputeHessian()
 		data->p(i) += delta;
 		if(i % 100 == 0) std::cout << "hessian col # " << i << " computed\n";
 	}
-	hessian_0 = hessian.sparseView();
+	// hessian_0 = hessian.sparseView();
 	return hessian.sparseView();
 }
 

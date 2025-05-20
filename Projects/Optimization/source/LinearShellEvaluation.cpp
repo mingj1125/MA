@@ -294,7 +294,7 @@ AScalar LinearShell::computeWeightedStrain(const Vector3a sample_loc, Vector3a d
     int n = 4*kernel_std/step; // Discretization points for cut segment
     for(int i = -n; i <= n; ++i){
         Vector3a point = sample_loc + i*direction*step;
-        if(point(0) > 1. || point(0) < 0. || point(1) > 1. || point(1) < 0.) continue;
+        if(point(0) > 1.-1e-5 || point(0) < 0.+1e-5 || point(1) > 1.-1e-5 || point(1) < 0.+1e-5) continue;
         AScalar dist = (point - sample_loc).norm();
         int t = pointInTriangle(point.segment<2>(0));
         // if point is on the edge make a small offset

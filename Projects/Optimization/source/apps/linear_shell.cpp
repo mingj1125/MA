@@ -8,8 +8,9 @@ int main(){
 
     LinearShell sim;
     Scene scene(sim);
-    // std::string mesh_name = "sun_mesh";
-    std::string mesh_name = "grid_double_refined";
+    // std::string mesh_name = "irregular_mesh_good";
+    // std::string mesh_name = "grid_double_refined";
+    std::string mesh_name = "sun_mesh_line_clean";
     scene.buildSceneFromMesh(mesh_name);
 
     Visualization vis(&scene);
@@ -40,7 +41,7 @@ int main(){
     OptimizationProblem p(&scene, "../../../Projects/Optimization/optimization_output/shell_" + mesh_name);//, "../../../Projects/Optimization/optimization_output/" + mesh_name + "_radii_debug.dat");
     std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateTargetStiffnessTensor>(sample_locs, Cs);
     // std::shared_ptr<ObjectiveEnergy> e = std::make_shared<ApproximateStiffnessTensorRelationship>(sample_locs);
-    p.objective_energies.push_back(e);
+    p.objective_energies.push_back(e); 
     // p.TestOptimizationGradient();
     // p.TestOptimizationSensitivity();
     if(!p.Optimize()) std::cout << "\n Gradient not converged to the set criterion \n";

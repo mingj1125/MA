@@ -160,6 +160,8 @@ void MassSpring::stretchX(AScalar strain){
 
             deformed_states(3*i, 0) = X(0,0)*strain;
             ++count;
+        }else{
+            fixed_vertices.push_back(i*3+2);
         }
     }
     // std::cout << count << std::endl;
@@ -185,6 +187,8 @@ void MassSpring::stretchY(AScalar strain){
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i+1, 0) = X(1,0)*strain;
+        }else{
+            fixed_vertices.push_back(i*3+2);
         }
     }
 }
@@ -207,6 +211,8 @@ void MassSpring::stretchSlidingY(AScalar strain){
             fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i+1, 0) = X(1,0)*strain;
+        } else {
+            fixed_vertices.push_back(i*3+2);
         }
     }
 }
@@ -230,6 +236,9 @@ void MassSpring::stretchSlidingX(AScalar strain){
 
             deformed_states(3*i, 0) = X(0,0)*strain;
         }
+        else{
+            fixed_vertices.push_back(i*3+2);
+        }
     }
 }
 
@@ -250,8 +259,10 @@ void MassSpring::stretchDiagonal(AScalar strain){
             fixed_vertices.push_back(i*3+1);
             fixed_vertices.push_back(i*3+2);
 
-            deformed_states(3*i+1, 0) = X(1,0)*strain + 0.001;
+            deformed_states(3*i+1, 0) = X(1,0)*strain + 0.1*X(0);
             deformed_states(3*i, 0) = X(0,0)*strain;
+        }else{
+            fixed_vertices.push_back(i*3+2);
         }
     }
 }
