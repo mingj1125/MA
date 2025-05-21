@@ -151,9 +151,9 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain yy", strain_yy);
     }
     // if(ImGui::InputInt("Stretch type", &stretch_type)){}
-    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("GD/SGN/FD", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type)) 
+    if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("GD/SGN/FD", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type) || ImGui::Checkbox("Predefined mesh group", &tag)) 
     {
-        if(optimized){
+        if(optimized && !tag){
             VectorXa params_from_file(scene->parameter_dof());
             std::string filename;
             if(network_visual){
@@ -180,9 +180,23 @@ void Visualization::sceneCallback(){
             if(network_visual) rod_network->addEdgeScalarQuantity("rod radii", params_from_file);
             else psMesh->addFaceScalarQuantity("Young's modulus", params_from_file);
             scene->simulateWithParameter(params_from_file, stretch_type);
+        } else if(tag && !optimized && !network_visual){
+            Eigen::VectorXi tag_from_file(scene->parameter_dof());
+            std::string filename = "../../../Projects/Optimization/data/"+scene->mesh_name+"_tags.dat";
+            tag_from_file = readTag(filename);
+            groups = tag_from_file.maxCoeff();
+            scene->parameters = setParameterFromTags(tag_from_file);
+
+            scene->simulateWithParameter(scene->parameters, stretch_type);
+            psMesh->addFaceScalarQuantity("Young's modulus", scene->parameters);
         }  else {
-                scene->parameters = scene->get_initial_params();
-                scene->simulateWithParameter(scene->get_initial_params(), stretch_type);
+            scene->parameters = scene->get_initial_params();
+            scene->simulateWithParameter(scene->get_initial_params(), stretch_type);
+            if(network_visual){
+                rod_network->addEdgeScalarQuantity("rod radii", scene->parameters);
+            } else {
+                psMesh->addFaceScalarQuantity("Young's modulus", scene->parameters);
+            }
         }
 
     } 
@@ -245,4 +259,40 @@ Vector3a Visualization::pointInDeformedTriangle(const Vector3a sample_loc){
     }
 
     return Vector3a::Zero();
+}
+
+Eigen::VectorXi Visualization::readTag(const std::string tag_file){
+    std::ifstream file(tag_file); // Open the file
+    if (!file.is_open()) {
+        std::cerr << "Error: Could not open tag file!" << std::endl;
+    }
+
+    std::string l;
+    std::vector<int> ftags;
+    Eigen::VectorXi face_tags = Eigen::VectorXi(scene->parameter_dof());
+    int count = 0;
+
+    while (std::getline(file, l)) {
+        try {
+            int tag = std::stoi(l); // Convert string to integer
+            face_tags(count) = tag; ++count;
+        } catch (const std::exception& e) {
+            std::cerr << "Error converting line to integer: " << l << std::endl;
+        }
+    }
+    return face_tags;
+}
+
+VectorXa Visualization::setParameterFromTags(Eigen::VectorXi tags){
+    VectorXa E = scene->get_initial_params();
+    if(scene->mesh_name == "sun_mesh_line_clean"){
+        AScalar factor = 10;
+        for(int i = 0; i < E.rows(); ++i){
+            if(tags[i] == 0)  E(i) /= factor*factor;
+            else if(tags[i] % 2 == 0) {
+                E(i) /= factor;
+            }
+        }
+    }
+    return E;
 }

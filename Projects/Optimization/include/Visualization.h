@@ -25,7 +25,7 @@ private:
     polyscope::PointCloud* rod_vertices;
     polyscope::PointCloud* probes;
     std::vector<Vector3a> sample_loc;
-    unsigned sample_density = 20;
+    unsigned sample_density = 20; 
     int to_boundary_width = 5;
 
     Eigen::MatrixXd meshV;
@@ -34,6 +34,8 @@ private:
 
     Scene* scene;
     bool optimized = false;
+    bool tag = false;
+    int groups = 0;
     int gradient_descent = 1;
     int stretch_type = 1;
     float C_test_point[2] = {0.5, 0.5};
@@ -51,6 +53,8 @@ public:
     }
     void updateCurrentVertex();
     Vector3a pointInDeformedTriangle(const Vector3a sample_loc);
+    Eigen::VectorXi readTag(const std::string tag_file); 
+    VectorXa setParameterFromTags(Eigen::VectorXi tags);
 };
 
 
