@@ -429,56 +429,6 @@ void LinearShellCostFunction::Finalize(const VectorXa& parameters)
       data->deformed_states = parameters;
 }
 
-void LinearShell::build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){
-    int n_params = n_nodes*3;
-
-	K.resize(n_params, n_params);
-    K.setZero();
-
-    stretchX(1.001); Simulate(false);
-
-    std::vector<Eigen::Triplet<AScalar>> triplets;
-
-    for(int i = 0; i < faces.rows(); ++i){
-        Eigen::Vector3i indices = faces.row(i);
-        Vector9a q;
-        Vector6a p;
-        for(int j = 0; j < 3; ++j){
-            q.segment(j*3,3) = deformed_states.segment(indices(j)*3, 3);
-            p.segment(j*2,2) = rest_states.segment(indices(j)*3, 2);
-        }
-
-        AScalar E = youngsmodulus_each_element(i);
-        AScalar lambda = E * nu /((1.0+nu)*(1.0-2.0*nu));
-        AScalar mu = E / (2.0*(1.0+nu));
-
-        Matrix9a J = PlanarStVenantKirchhoffHessianImpl_(q, p, thickness, lambda, mu);
-
-        for(int k = 0; k < 3; k++)
-                for(int l = 0; l < 3; l++)
-                    for(int a = 0; a < 3; a++)
-                        for (int j = 0; j < 3; j++){
-                            triplets.emplace_back(indices[k]*3+a, indices[l]*3+j, J(k*3 + a, l * 3 + j));
-                        }
-
-    }
-
-    K.setFromTriplets(triplets.begin(), triplets.end());
-
-    std::vector<Eigen::Triplet<AScalar>> triplets_k = SparseMatrixToTriplets(K);
-
-    for(int i=0; i<triplets_k.size(); ++i)
-    {
-    	if(std::isnan(triplets_k[i].value()))
-        {
-            std::cout << triplets_k[i].row() << " " << triplets_k[i].col() << " is nan" << std::endl;
-    		throw std::exception();
-        }
-    }
-
-    K = EnforceSquareMatrixConstraints(K, fixed_vertices, true);
-}
-
 void LinearShell::build_sim_hessian(Eigen::SparseMatrix<AScalar>& K){
     int n_params = n_nodes*3;
 

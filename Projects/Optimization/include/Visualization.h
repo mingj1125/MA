@@ -39,6 +39,7 @@ private:
     int gradient_descent = 1;
     int stretch_type = 1;
     float C_test_point[2] = {0.5, 0.5};
+    AScalar length = 0.001;
 
     polyscope::SurfaceMesh* psMesh;
 

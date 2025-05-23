@@ -74,7 +74,6 @@ class MassSpring : public Simulation {
     virtual void setDeformedState(VectorXa parameters){
         deformed_states = parameters;
     }
-    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K){}
     virtual void build_sim_hessian(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);

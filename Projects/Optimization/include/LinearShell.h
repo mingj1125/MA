@@ -51,13 +51,16 @@ class LinearShell : public Simulation
         deformed_states = parameters;
         computeStressAndStraininTriangles();
     }
-    virtual void build_d2Edx2(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_sim_hessian(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);
     virtual MatrixXa getStressGradientWrtParameter(){return eval_info_of_sample.stress_gradients_wrt_parameter;}
     virtual MatrixXa getStressGradientWrtx(){return eval_info_of_sample.stress_gradients_wrt_x;}
     virtual MatrixXa getStrainGradientWrtx(){return eval_info_of_sample.strain_gradients_wrt_x;}
+
+    // Window evaluation
+    virtual Matrix3a findStressTensorinWindow(const Vector2a max_corner, const Vector2a min_corner);
+    virtual Matrix3a findStrainTensorinWindow(const Vector2a max_corner, const Vector2a min_corner);
 
     // Native function
     void resetSimulation();  
@@ -76,6 +79,10 @@ class LinearShell : public Simulation
     std::vector<Matrix2a> SGradientWrtx(int face_id);
     AScalar computeWeightedStrain(const Vector3a sample_loc, Vector3a direction, std::vector<AScalar>& gradients_wrt_nodes);
     std::vector<Matrix2a> GSGradientWrtx(int face_id);  
+
+    AScalar computeTriangleAreaInWindow(const Vector2a max_corner, const Vector2a min_corner, int face_id);
+    AScalar computeWindowArea(const Vector2a max_corner, const Vector2a min_corner);
+    bool pointInTriangle(const Vector2a sample_loc, int face_id);
 
     // Simulator    
     AScalar global_stopping_criteria = 1e-7;

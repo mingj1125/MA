@@ -203,7 +203,7 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 1e1;
+	options.initial_step_size = 8e-1;
 	options.tolerance = 5e-4;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
@@ -697,7 +697,7 @@ bool OptimizationProblemCostFunctionCeres::Evaluate(double* parameters, double* 
 
 	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
 	data->scene->parameters = data->full_p;
-	// data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);

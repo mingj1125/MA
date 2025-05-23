@@ -26,6 +26,24 @@ public:
     VectorXa parameters; 
     int num_test = 3;
 
+    int parameter_dof();
+    int x_dof();
+
+    VectorXa get_initial_params(){return sim.get_initial_parameter();}
+    VectorXa get_curent_sim_params(){return sim.get_current_parameter();}
+    VectorXa get_undeformed_nodes(){return sim.get_undeformed_nodes();};
+    VectorXa get_deformed_nodes(){return sim.get_deformed_nodes();};
+    std::vector<int> get_constraints(){return sim.get_constraint_map();}
+    std::vector<int> get_constraint_sim(int i){return constraint_sims[i];}
+    std::vector<std::array<size_t, 2>> get_edges(){return sim.get_edges();};
+
+    std::vector<std::vector<int>> constraint_sims;
+    std::vector<Eigen::SparseMatrix<AScalar>> hessian_sims;
+    std::vector<Eigen::SparseMatrix<AScalar>> hessian_p_sims;
+
+    void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type, 1.1); sim.Simulate();}
+
+    // ------------------------------- Kernel Evaluation -------------------------------
     struct C_info{
 
         std::vector<Vector6a> C_diff_p;
@@ -43,29 +61,20 @@ public:
     
     };
     std::vector<C_info> sample_Cs_info; 
-    std::vector<std::vector<int>> constraint_sims;
-    std::vector<Eigen::SparseMatrix<AScalar>> hessian_sims;
-    std::vector<Eigen::SparseMatrix<AScalar>> hessian_p_sims;
     int num_directions = 16;
 
-    int parameter_dof();
-    int x_dof();
-    VectorXa get_initial_params(){return sim.get_initial_parameter();}
-    VectorXa get_curent_sim_params(){return sim.get_current_parameter();}
-    VectorXa get_undeformed_nodes(){return sim.get_undeformed_nodes();};
-    VectorXa get_deformed_nodes(){return sim.get_deformed_nodes();};
-    std::vector<int> get_constraints(){return sim.get_constraint_map();}
-    std::vector<int> get_constraint_sim(int i){return constraint_sims[i];}
-    std::vector<std::array<size_t, 2>> get_edges(){return sim.get_edges();};
     void findBestCTensorviaProbing(std::vector<Vector3a> sample_locs, 
             const std::vector<Vector3a> line_directions, bool opt = false);
     void CTensorPerturbx(std::vector<Vector3a> sample_locs, 
         const std::vector<Vector3a> line_directions, MatrixXa deformed_x_offset);       
-    void buildSimulationHessian(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edx2(K);}
-    void buildSimulationdEdxp(Eigen::SparseMatrix<AScalar>& K){sim.build_d2Edxp(K);}
-    void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type, 1.1); sim.Simulate();}
     Matrix3a returnApproxStressInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
     Matrix3a returnApproxStrainInCurrentSimulation(const Vector3a sample_loc, const std::vector<Vector3a> line_directions);
+
+    // ------------------------------- Window Evaluation -------------------------------
+
+    void findCTensorInWindow(std::vector<Vector4a> corners, bool opt = false);
+    Matrix3a returnWindowStressInCurrentSimulation(Vector2a max_corner, Vector2a min_corner);
+    Matrix3a returnWindowStrainInCurrentSimulation(Vector2a max_corner, Vector2a min_corner);
 
 };
 

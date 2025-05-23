@@ -35,7 +35,7 @@ public:
         target_locations = target_locations_m;
         target_stiffness_tensors = target_stiffness_tensors_m;
         // consider_entry.setConstant(1);
-        setConsideringEntry({1, 1, 0, 1, 0, 0});
+        setConsideringEntry({1, 1, 0, 1, 0, 1});
     }
 
     void setConsideringEntry(Eigen::Vector<int, 6> ce){

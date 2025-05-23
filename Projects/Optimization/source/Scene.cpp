@@ -211,3 +211,51 @@ void Scene::CTensorPerturbx(std::vector<Vector3a> sample_locs,
     for(int l = 0; l < sample_locs.size(); ++l)
         std::cout << "C: " << sample_Cs_info[l].C_entry.transpose() << std::endl;
 }
+
+void Scene::findCTensorInWindow(std::vector<Vector4a> corners, bool opt){
+    std::vector<stress_strain_relationship> samples(corners.size(), stress_strain_relationship(parameters.rows(), num_test, sim.get_deformed_nodes().rows()));
+    for(int i = 1; i <= num_test; ++i){
+        sim.applyBoundaryStretch(i);
+        if(opt){
+            // std::cout << parameters.transpose() << std::endl;
+            sim.setOptimizationParameter(parameters);
+        }
+        sim.Simulate(false);
+        Vector2a max_corner; Vector2a min_corner;
+        for(int l = 0; l < corners.size(); ++l){
+            Vector2a max_corner = corners[l].segment(0,2);
+            Vector2a min_corner = corners[l].segment(2,2);
+
+            Matrix3a E = sim.findStrainTensorinWindow(max_corner, min_corner);
+            Matrix3a S = sim.findStressTensorinWindow(max_corner, min_corner);
+
+            samples[l].t.col(i-1) = Vector3a({S(0,0), S(1,1), S(1,0)});
+            samples[l].n.col(i-1) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
+        }
+    }
+
+    for(int l = 0; l < corners.size(); ++l){
+        Matrix3a fitted_tensor; fitted_tensor.setZero();
+        MatrixXa A = MatrixXa::Zero(3*num_test,6);
+        VectorXa b(3*num_test);
+        for(int i = 0; i < num_test; ++i){
+            MatrixXa A_block = MatrixXa::Zero(3,6);
+            Vector3a normal = samples[l].n.col(i);
+            A_block << normal(0), normal(1), normal(2), 0, 0, 0,
+                    0, normal(0), 0, normal(1), normal(2), 0,
+                    0, 0, normal(0), 0, normal(1), normal(2);
+            A.block(i*3, 0, 3, 6) = A_block;
+            b.segment(i*3, 3) = samples[l].t.col(i);
+        }
+        VectorXa x = (A.transpose()*A).ldlt().solve(A.transpose()*b);
+        std::cout << "C window: " << x.transpose() << std::endl;
+    }
+}
+
+Matrix3a Scene::returnWindowStressInCurrentSimulation(Vector2a max_corner, Vector2a min_corner){
+    return sim.findStressTensorinWindow(max_corner, min_corner);
+}
+
+Matrix3a Scene::returnWindowStrainInCurrentSimulation(Vector2a max_corner, Vector2a min_corner){
+    return sim.findStrainTensorinWindow(max_corner, min_corner);
+}

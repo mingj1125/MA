@@ -150,6 +150,47 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain xy", strain_xy);
         probes->addScalarQuantity("strain yy", strain_yy);
     }
+    if (ImGui::Button("Visualize Strain Window")){
+        std::vector<AScalar> strain_xx(sample_loc.size());
+        std::vector<AScalar> strain_xy(sample_loc.size());
+        std::vector<AScalar> strain_yy(sample_loc.size());
+
+        int idx = 0;
+        for(auto sample_location: sample_loc){
+            Vector2a max_corner = sample_location.segment(0,2) + length*Vector2a({1,1});
+            Vector2a min_corner = sample_location.segment(0,2) - length*Vector2a({1,1});
+            Matrix3a strain = scene->returnWindowStrainInCurrentSimulation(max_corner, min_corner);
+            // std::cout << "strain: " << strain << std::endl;
+            strain_xx.at(idx) = strain(0,0);
+            strain_xy.at(idx) = strain(1,0);
+            strain_yy.at(idx) = strain(1,1);
+            ++idx;
+        }
+
+        probes->addScalarQuantity("window strain xx", strain_xx);
+        probes->addScalarQuantity("window strain xy", strain_xy);
+        probes->addScalarQuantity("window strain yy", strain_yy);
+    }
+    if(ImGui::Button("Visualize Stress Window")){
+        std::vector<AScalar> stress_xx(sample_loc.size());
+        std::vector<AScalar> stress_xy(sample_loc.size());
+        std::vector<AScalar> stress_yy(sample_loc.size());
+
+        int idx = 0;
+        for(auto sample_location: sample_loc){
+            Vector2a max_corner = sample_location.segment(0,2) + length*Vector2a({1,1});
+            Vector2a min_corner = sample_location.segment(0,2) - length*Vector2a({1,1});
+            Matrix3a stress = scene->returnWindowStressInCurrentSimulation(max_corner, min_corner);
+            stress_xx.at(idx) = stress(0,0);
+            stress_xy.at(idx) = stress(1,0);
+            stress_yy.at(idx) = stress(1,1);
+            ++idx;
+        }
+
+        probes->addScalarQuantity("window stress xx", stress_xx);
+        probes->addScalarQuantity("window stress xy", stress_xy);
+        probes->addScalarQuantity("window stress yy", stress_yy);
+    }
     // if(ImGui::InputInt("Stretch type", &stretch_type)){}
     if (ImGui::Checkbox("Optimized", &optimized) || ImGui::InputInt("GD/SGN/FD", &gradient_descent) || ImGui::InputInt("Stretch type", &stretch_type) || ImGui::Checkbox("Predefined mesh group", &tag)) 
     {
@@ -209,6 +250,12 @@ void Visualization::sceneCallback(){
             directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
         }
         scene->findBestCTensorviaProbing({s}, directions, true);
+    }
+    if(ImGui::Button("Calculate Window C")){
+        Vector2a s = {C_test_point[0], C_test_point[1]};
+        Vector2a max_corner = s + length*Vector2a({1,1});
+        Vector2a min_corner = s - length*Vector2a({1,1});
+        scene->findCTensorInWindow({Vector4a({max_corner(0), max_corner(1), min_corner(0), min_corner(1)})}, true);
     }
     
 }
@@ -286,11 +333,11 @@ Eigen::VectorXi Visualization::readTag(const std::string tag_file){
 VectorXa Visualization::setParameterFromTags(Eigen::VectorXi tags){
     VectorXa E = scene->get_initial_params();
     if(scene->mesh_name == "sun_mesh_line_clean"){
-        AScalar factor = 10;
+        AScalar factor = 1.4;
         for(int i = 0; i < E.rows(); ++i){
             if(tags[i] == 0)  E(i) /= factor*factor;
-            else if(tags[i] % 2 == 0) {
-                E(i) /= factor;
+            else if(tags[i] % 2 == 1) {
+                E(i) *= factor;
             }
         }
     }
