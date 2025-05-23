@@ -251,11 +251,30 @@ void Visualization::sceneCallback(){
         }
         scene->findBestCTensorviaProbing({s}, directions, true);
     }
-    if(ImGui::Button("Calculate Window C")){
+    if(ImGui::InputFloat("Window length", &length)){}
+    if(ImGui::Button("Calculate Window C") || ImGui::Button("Show Window")){
         Vector2a s = {C_test_point[0], C_test_point[1]};
         Vector2a max_corner = s + length*Vector2a({1,1});
         Vector2a min_corner = s - length*Vector2a({1,1});
         scene->findCTensorInWindow({Vector4a({max_corner(0), max_corner(1), min_corner(0), min_corner(1)})}, true);
+        show_window = !show_window;
+        if (show_window) {
+            Vector2a s = {C_test_point[0], C_test_point[1]};
+            Vector2a max_corner = s + length * Vector2a({1, 1});
+            Vector2a min_corner = s - length * Vector2a({1, 1});
+            std::vector<glm::vec3> window_corners = {
+            glm::vec3(min_corner(0), min_corner(1), 0),
+            glm::vec3(max_corner(0), min_corner(1), 0),
+            glm::vec3(max_corner(0), max_corner(1), 0),
+            glm::vec3(min_corner(0), max_corner(1), 0)
+            };
+            std::vector<std::array<size_t, 2>> window_edges = {
+            {0, 1}, {1, 2}, {2, 3}, {3, 0}
+            };
+            polyscope::registerCurveNetwork("Window", window_corners, window_edges)
+            ->setColor(glm::vec3(1.0, 0.0, 0.0))
+            ->setRadius(0.005);
+        }
     }
     
 }

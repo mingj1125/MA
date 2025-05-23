@@ -217,7 +217,6 @@ void Scene::findCTensorInWindow(std::vector<Vector4a> corners, bool opt){
     for(int i = 1; i <= num_test; ++i){
         sim.applyBoundaryStretch(i);
         if(opt){
-            // std::cout << parameters.transpose() << std::endl;
             sim.setOptimizationParameter(parameters);
         }
         sim.Simulate(false);

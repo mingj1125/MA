@@ -44,30 +44,6 @@ Vector2a find_line_intersection(Vector2a p1, Vector2a p2, Vector2a p3, Vector2a 
     return intersection;
 }
 
-void placeCornerInPolygon(std::vector<Vector2a>& polygon, Vector2a corner){
-    std::vector<Vector2a> new_polygon;
-    bool corner_found = false;
-    for(int i = 0; i < polygon.size(); ++i){
-        Vector2a v0 = polygon[i];
-        Vector2a v1 = polygon[(i+1)%polygon.size()];
-        if((v0(0) == corner(0) && v1(1) == corner(1) || v1(0) == corner(0) && v0(1) == corner(1)) && !corner_found){
-            if((v0-corner).norm() < 1e-9 || (v1-corner).norm() < 1e-9) {
-                corner_found = true; 
-                new_polygon.push_back(v0);
-            } else {
-                new_polygon.push_back(v0);
-                new_polygon.push_back(corner);
-                corner_found = true;
-            }
-        }
-        else{
-            new_polygon.push_back(v0);
-        }
-    }
-    if(polygon.size() < 2 || !corner_found) new_polygon.push_back(corner);
-    polygon = new_polygon;
-}
-
 AScalar LinearShell::computeTriangleAreaInWindow(const Vector2a max_corner, const Vector2a min_corner, int face_id){
 
     std::vector<Vector2a> polygon;
@@ -77,7 +53,7 @@ AScalar LinearShell::computeTriangleAreaInWindow(const Vector2a max_corner, cons
         Eigen::Vector2i v0_in_window = test_point_in_window(v0, max_corner, min_corner);
         Eigen::Vector2i v1_in_window = test_point_in_window(v1, max_corner, min_corner);
 
-        if(v0_in_window.norm() < 1e-3){
+        if(v0_in_window.norm() < 1e-9){
             polygon.push_back(v0);
         }
         Vector2a intersection_1 = find_line_intersection(v0, v1, max_corner, Vector2a{max_corner(0), min_corner(1)});
@@ -103,7 +79,7 @@ AScalar LinearShell::computeTriangleAreaInWindow(const Vector2a max_corner, cons
         for(int j = 0; j < polygon_candidates.size(); ++j){
             polygon.push_back(polygon_candidates[j]);
         }
-        if(v1_in_window.norm() < 1e-3){
+        if(v1_in_window.norm() < 1e-9){
             polygon.push_back(v1);
         }
     }
@@ -113,27 +89,32 @@ AScalar LinearShell::computeTriangleAreaInWindow(const Vector2a max_corner, cons
     Vector2a c2 = Vector2a{min_corner(0), max_corner(1)};
     Vector2a c3 = max_corner;
     Vector2a c4 = Vector2a{max_corner(0), min_corner(1)};
+
     if(pointInTriangle(c1, face_id)){
-        placeCornerInPolygon(polygon, c1);
-        // std::cout << "corner 1 in triangle " << face_id << std::endl;
-        // if(face_id == 162) std::cout << "polygon size: " << polygon.size() << std::endl;
+        polygon.push_back(c1);
     }
     if(pointInTriangle(c2, face_id)){
-        placeCornerInPolygon(polygon, c2);
-        // std::cout << "corner 2 in triangle " << face_id << std::endl;
-        // if(face_id == 162) std::cout << "polygon size: " << polygon.size() << std::endl;
+        polygon.push_back(c2);
     }
     if(pointInTriangle(c3, face_id)){
-        placeCornerInPolygon(polygon, c3);
-        // std::cout << "corner 3 in triangle " << face_id << std::endl;
-        // if(face_id == 162) std::cout << "polygon size: " << polygon.size() << std::endl;
+        polygon.push_back(c3);  
     }
     if(pointInTriangle(c4, face_id)){
-        placeCornerInPolygon(polygon, c4);
-        // std::cout << "corner 4 in triangle " << face_id << std::endl;
-        // if(face_id == 162) std::cout << "polygon size: " << polygon.size() << std::endl;
+        polygon.push_back(c4);
     }
-    // if(face_id == 162) std::cout << "polygon size: " << polygon.size() << std::endl;
+    // Sort polygon vertices into clockwise order
+    Vector2a centroid = Vector2a::Zero();
+    for (const auto& vertex : polygon) {
+        centroid += vertex;
+    }
+    centroid /= polygon.size();
+
+    std::sort(polygon.begin(), polygon.end(), [&centroid](const Vector2a& a, const Vector2a& b) {
+        AScalar angle_a = std::atan2(a(1) - centroid(1), a(0) - centroid(0));
+        AScalar angle_b = std::atan2(b(1) - centroid(1), b(0) - centroid(0));
+        return angle_a < angle_b;
+    });
+
 
     if(polygon.size() <= 2){
         return 0;

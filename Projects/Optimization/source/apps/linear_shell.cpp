@@ -9,8 +9,8 @@ int main(){
     LinearShell sim;
     Scene scene(sim);
     // std::string mesh_name = "irregular_mesh_good";
-    std::string mesh_name = "grid_double_refined";
-    // std::string mesh_name = "sun_mesh_line_clean";
+    // std::string mesh_name = "grid_double_refined";
+    std::string mesh_name = "sun_mesh_line_clean";
     scene.buildSceneFromMesh(mesh_name);
 
     Visualization vis(&scene);
