@@ -16,12 +16,12 @@ class LinearShell : public Simulation
     VectorXa rest_states;
     VectorXa youngsmodulus_each_element;
     Eigen::MatrixXi faces;
-    AScalar initial_youngsmodulus = 2.5e6;
-    AScalar nu = 0.45;
-    AScalar thickness = 0.0001;
+    AScalar initial_youngsmodulus = 2.5e6; // initial Young's modulus for each element
+    AScalar nu = 0.1;
+    AScalar thickness = 0.01;
     std::vector<int> fixed_vertices;
 
-    AScalar kernel_std = 0.02;
+    AScalar kernel_std = 0.1; // standard deviation for Gaussian kernel used in probing
     std::vector<Matrix2a> strain_tensors_each_element;
     std::vector<Matrix2a> stress_tensors_each_element;
 
@@ -51,6 +51,7 @@ class LinearShell : public Simulation
         deformed_states = parameters;
         computeStressAndStraininTriangles();
     }
+    virtual void set_kernel_std(AScalar std){kernel_std = std;}
     virtual void build_sim_hessian(Eigen::SparseMatrix<AScalar>& K);
     virtual void build_d2Edxp(Eigen::SparseMatrix<AScalar>& K);
     virtual void applyBoundaryStretch(int i, AScalar strain = 0);
@@ -83,6 +84,8 @@ class LinearShell : public Simulation
     AScalar computeTriangleAreaInWindow(const Vector2a max_corner, const Vector2a min_corner, int face_id);
     AScalar computeWindowArea(const Vector2a max_corner, const Vector2a min_corner);
     bool pointInTriangle(const Vector2a sample_loc, int face_id);
+    bool lineCutTriangle(const Vector3a x1, const Vector3a x2, const Vector3a x3, const Vector3a sample_point, const Vector3a line_direction, Vector3a &cut_point_coordinate);
+    Vector2a solveLineIntersection(const Vector3a sample_point, const Vector3a line_direction, const Vector3a v1, const Vector3a v2);
 
     // Simulator    
     AScalar global_stopping_criteria = 1e-7;

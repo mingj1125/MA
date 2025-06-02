@@ -42,6 +42,7 @@ public:
     std::vector<Eigen::SparseMatrix<AScalar>> hessian_p_sims;
 
     void simulateWithParameter(const VectorXa parameters, int stretch_type){sim.setOptimizationParameter(parameters); sim.applyBoundaryStretch(stretch_type, 1.1); sim.Simulate();}
+    void setKernelStd(AScalar std){sim.set_kernel_std(std);}
 
     // ------------------------------- Kernel Evaluation -------------------------------
     struct C_info{
@@ -61,7 +62,8 @@ public:
     
     };
     std::vector<C_info> sample_Cs_info; 
-    int num_directions = 16;
+    std::vector<C_info> window_Cs_info; 
+    int num_directions = 24; // number of directions to sample for C tensor
 
     void findBestCTensorviaProbing(std::vector<Vector3a> sample_locs, 
             const std::vector<Vector3a> line_directions, bool opt = false);

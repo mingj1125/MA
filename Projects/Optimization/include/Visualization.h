@@ -40,7 +40,10 @@ private:
     int gradient_descent = 1;
     int stretch_type = 1;
     float C_test_point[2] = {0.5, 0.5};
-    float length = 0.01;
+    float length = 0.1;
+    float kernel_std = 0.08;
+    std::vector<Vector6a> Cs;
+    std::vector<Vector6a> window_Cs;
 
     polyscope::SurfaceMesh* psMesh;
 
@@ -57,6 +60,19 @@ public:
     Vector3a pointInDeformedTriangle(const Vector3a sample_loc);
     Eigen::VectorXi readTag(const std::string tag_file); 
     VectorXa setParameterFromTags(Eigen::VectorXi tags);
+    std::vector<Vector3a> getSampleLocations(){return sample_loc;};
+    std::vector<Vector6a> getCs(){return Cs;};
+    std::vector<Vector6a> getWindowCs(){return window_Cs;};
+    std::vector<Vector4a> getWindowCorners(){
+        std::vector<Vector4a> corners(sample_loc.size(), Vector4a::Zero());
+        for(int i = 0; i < sample_loc.size(); ++i){
+            Vector2a s = {sample_loc[i](0), sample_loc[i](1)};
+            Vector2a max_corner = s + length*Vector2a({1,1});
+            Vector2a min_corner = s - length*Vector2a({1,1});
+            corners[i] = Vector4a({max_corner(0), max_corner(1), min_corner(0), min_corner(1)});
+        }
+        return corners;
+    }
 };
 
 

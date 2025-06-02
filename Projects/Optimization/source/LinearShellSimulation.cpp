@@ -38,7 +38,7 @@ void LinearShell::resetSimulation(){
 
 void LinearShell::applyBoundaryStretch(int i, AScalar strain){
 
-    AScalar strain_apply = 1.5;
+    AScalar strain_apply = 3.7;
     if(strain > 0.) strain_apply = strain;
     switch (i)
     {
@@ -58,7 +58,7 @@ void LinearShell::applyBoundaryStretch(int i, AScalar strain){
         stretchX(strain_apply);
         break;  
     case 3:
-        stretchShear(1.5);
+        stretchShear(strain_apply);
         break;          
     default:
         break;
@@ -190,15 +190,15 @@ void LinearShell::stretchShear(AScalar strain){
         if(X(0) < tol) {
             fixed_vertices.push_back(i*3);
             fixed_vertices.push_back(i*3+1);
-            fixed_vertices.push_back(i*3+2);
+            // fixed_vertices.push_back(i*3+2);
         }
         else if(X(0) > 1.0 - tol) {
             fixed_vertices.push_back(i*3);
             fixed_vertices.push_back(i*3+1);
-            fixed_vertices.push_back(i*3+2);
+            // fixed_vertices.push_back(i*3+2);
 
             deformed_states(3*i+1) = X(1)+strain-1;
-            deformed_states(3*i) = X(0)+strain-1;
+            deformed_states(3*i) = X(0)+(strain-1);
         }
         fixed_vertices.push_back(i*3+2);
     }
@@ -240,10 +240,10 @@ damped_newton_result LinearShell::Simulate(bool use_log)
 
     damped_newton_options options;
     options.global_stopping_criteria = global_stopping_criteria;
-    options.change_stopping_criteria = 1e-8;
+    options.change_stopping_criteria = 1e-10;
     options.max_iterations = max_iterations;
     options.damp_matrix = damp_matrix;
-    options.damping = 1e-2;
+    options.damping = 1e-3;
     options.solver_type = DN_SOLVER_LLT;
     options.woodbury = false;
     options.sherman_morrison = false;

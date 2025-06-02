@@ -11,9 +11,10 @@ AScalar ApproximateTargetStiffnessTensor::ComputeEnergy(Scene* scene){
         Vector6a target_C = target_stiffness_tensors[k];
         for(int j = 0; j < 6; ++j){
 
-            if(consider_entry(j) == 1) energy += 0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
+             energy += consider_entry(j)*0.5*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*(sample_Cs_info[k].C_entry(j) - target_C(j));
 
         }
+       
     }    
     return energy;
 }
@@ -38,7 +39,7 @@ VectorXa ApproximateTargetStiffnessTensor::Compute_dfdx_sim(Scene* scene){
                 AScalar g = 0;
                 for(int j = 0; j < 6; ++j){
     
-                    if(consider_entry(j) == 1) g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x_sim[i](j, test);
+                    g += consider_entry(j)*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_x_sim[i](j, test);
     
                 }
                 gradient_wrt_x(scene->x_dof()*test+ i) += g;
@@ -59,7 +60,7 @@ VectorXa ApproximateTargetStiffnessTensor::Compute_dfdp(Scene* scene){
             AScalar g = 0;
             for(int j = 0; j < 6; ++j){
 
-                if(consider_entry(j) == 1) g += (sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_p[i](j);
+                g += consider_entry(j)*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_p[i](j);
 
             }
             gradient_wrt_thickness(i) += g;
@@ -89,7 +90,7 @@ std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensor::Comp
                 AScalar g = 0;
                 for(int j = 0; j < 6; ++j){
 
-                    if(consider_entry(j) == 1) g += sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
+                    g += consider_entry(j)*sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
 
                 }
                 drdx.coeffRef(i, 0) += g;
@@ -122,7 +123,7 @@ std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensor::Comp
                 AScalar g = 0;
                 for(int j = 0; j < 6; ++j){
 
-                    if(consider_entry(j) == 1) g += sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
+                    g += consider_entry(j)*sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
 
                 }
                 
@@ -132,7 +133,7 @@ std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensor::Comp
                 AScalar g = 0;
                 for(int j = 0; j < 6; ++j){
 
-                    if(consider_entry(j) == 1) g += sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
+                    g += consider_entry(j)*sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
 
                 }
                 if(std::abs(g) > 1e-7) drdp.coeffRef(i, 0) += g;
@@ -156,7 +157,7 @@ std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensor::Comp
                 AScalar g = 0;
                 for(int j = 0; j < 6; ++j){
 
-                    if(consider_entry(j) == 1) g += sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
+                    g += consider_entry(j)*sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
 
                 }
                 drdp.coeffRef(i, 0) += g;
@@ -365,4 +366,175 @@ void ApproximateStiffnessTensorRelationship::OnlyCollect(Scene* scene, MatrixXa 
         directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
     }
     scene->CTensorPerturbx(target_locations, directions, offsets);
+}
+
+AScalar ApproximateTargetStiffnessTensorWindow::ComputeEnergy(Scene* scene){
+
+    AScalar energy = 0;
+    auto window_Cs_info = scene->window_Cs_info;
+    for(int k = 0; k < target_corners.size(); ++k){
+        Vector6a target_C = target_stiffness_tensors[k];
+        for(int j = 0; j < 6; ++j){
+
+            if(consider_entry(j) > 0.0) energy += consider_entry(j)*0.5*(window_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*(window_Cs_info[k].C_entry(j) - target_C(j));
+
+        }
+       
+    }    
+    return energy;
+}
+
+VectorXa ApproximateTargetStiffnessTensorWindow::Compute_dfdx_sim(Scene* scene){
+    
+    VectorXa gradient_wrt_x(scene->x_dof()*scene->num_test); gradient_wrt_x.setZero();
+    auto window_Cs_info = scene->window_Cs_info;
+
+    for(int test = 0; test < scene->num_test; ++test){
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+        for(int k = 0; k < target_corners.size(); ++k){
+            Vector6a target_C = target_stiffness_tensors[k];
+            for(int i = 0; i < scene->x_dof(); ++i){
+                if(constrained[i]) continue;
+                // if(sample_Cs_info[k].C_diff_x_sim[i].norm() > 0) std::cout << i << " dCdx : \n"<< sample_Cs_info[k].C_diff_x_sim[i] << std::endl;
+    
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+    
+                    if(consider_entry(j) > 0.0) g += consider_entry(j)*(window_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*window_Cs_info[k].C_diff_x_sim[i](j, test);
+    
+                }
+                gradient_wrt_x(scene->x_dof()*test+ i) += g;
+            }
+        }
+    }
+    
+    return gradient_wrt_x;
+}
+
+VectorXa ApproximateTargetStiffnessTensorWindow::Compute_dfdp(Scene* scene){
+    
+    VectorXa gradient_wrt_thickness(scene->parameter_dof()); gradient_wrt_thickness.setZero();
+    auto sample_Cs_info = scene->window_Cs_info;
+    for(int k = 0; k < target_corners.size(); ++k){
+        Vector6a target_C = target_stiffness_tensors[k];
+        for(int i = 0; i < gradient_wrt_thickness.size(); ++i){
+            AScalar g = 0;
+            for(int j = 0; j < 6; ++j){
+
+                if(consider_entry(j) > 0.0) g += consider_entry(j)*(sample_Cs_info[k].C_entry(j) - target_C(j))/abs(target_C(j))/abs(target_C(j))*sample_Cs_info[k].C_diff_p[i](j);
+
+            }
+            gradient_wrt_thickness(i) += g;
+        }
+    }
+
+    return gradient_wrt_thickness;
+}
+
+std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensorWindow::Compute_d2fdx2(Scene* scene){
+    
+    std::vector<Eigen::SparseMatrix<AScalar>> d2fdx2(scene->num_test, Eigen::SparseMatrix<AScalar>(scene->x_dof(), scene->x_dof()));
+    auto sample_Cs_info = scene->window_Cs_info;
+
+    for(int test = 0; test < scene->num_test; ++test){
+        Eigen::SparseMatrix<AScalar> drdx(scene->x_dof(), 1); drdx.setZero();
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+
+        for(int k = 0; k < target_corners.size(); ++k){
+            Vector6a target_C = target_stiffness_tensors[k];
+            for(int i = 0; i < drdx.size(); ++i){
+                if(constrained[i]) continue;
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+
+                    if(consider_entry(j) > 0.0) g += consider_entry(j)*sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
+
+                }
+                drdx.coeffRef(i, 0) += g;
+            }
+        }
+        d2fdx2[test] = (drdx * drdx.transpose()).pruned();
+    }
+
+    return d2fdx2;
+}
+
+std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensorWindow::Compute_d2fdxp(Scene* scene){
+    
+    std::vector<Eigen::SparseMatrix<AScalar>> d2fdxp(scene->num_test, Eigen::SparseMatrix<AScalar>(scene->parameter_dof(), scene->x_dof()));
+    auto sample_Cs_info = scene->window_Cs_info;
+    for(int test = 0; test < scene->num_test; ++test){
+        Eigen::SparseMatrix<AScalar> drdx(scene->x_dof(), 1); drdx.setZero();
+        Eigen::SparseMatrix<AScalar> drdp(scene->parameter_dof(), 1); drdp.setZero();
+
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraints();
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+
+        for(int k = 0; k < target_corners.size(); ++k){
+            Vector6a target_C = target_stiffness_tensors[k];
+            for(int i = 0; i < drdx.size(); ++i){
+                if(constrained[i]) continue;
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+
+                    if(consider_entry(j) > 0.0) g += consider_entry(j)*sample_Cs_info[k].C_diff_x_sim[i](j, test)/abs(target_C(j));
+
+                }
+                
+                if(std::abs(g) > 1e-7) drdx.coeffRef(i, 0) += g;
+            }
+            for(int i = 0; i < drdp.size(); ++i){
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+
+                    if(consider_entry(j) > 0.0) g += consider_entry(j)*sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
+
+                }
+                if(std::abs(g) > 1e-7) drdp.coeffRef(i, 0) += g;
+            }
+        }
+        d2fdxp[test] = (drdp * drdx.transpose()).pruned();
+    }    
+
+    return d2fdxp;
+}
+
+std::vector<Eigen::SparseMatrix<AScalar>> ApproximateTargetStiffnessTensorWindow::Compute_d2fdp2(Scene* scene){
+    
+    std::vector<Eigen::SparseMatrix<AScalar>> d2fdp2(scene->num_test, Eigen::SparseMatrix<AScalar>(scene->parameter_dof(), scene->parameter_dof()));
+    auto sample_Cs_info = scene->window_Cs_info;
+    for(int test = 0; test < scene->num_test; ++test){
+        Eigen::SparseMatrix<AScalar> drdp(scene->parameter_dof(), 1); drdp.setZero();
+        for(int k = 0; k < target_corners.size(); ++k){
+            Vector6a target_C = target_stiffness_tensors[k];
+            for(int i = 0; i < drdp.size(); ++i){
+                AScalar g = 0;
+                for(int j = 0; j < 6; ++j){
+
+                    if(consider_entry(j) > 0.0) g += consider_entry(j)*sample_Cs_info[k].C_diff_p[i](j)/abs(target_C(j));
+
+                }
+                drdp.coeffRef(i, 0) += g;
+            }
+        }
+        d2fdp2[test] = (drdp * drdp.transpose()).pruned();
+    }
+
+    return d2fdp2;
+}
+
+void ApproximateTargetStiffnessTensorWindow::SimulateAndCollect(Scene* scene){
+
+    scene->findCTensorInWindow(target_corners, true);
 }

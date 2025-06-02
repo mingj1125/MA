@@ -16,6 +16,7 @@ public:
     virtual VectorXa get_current_parameter(){}
     virtual std::vector<int> get_constraint_map() = 0;
     virtual std::vector<std::array<size_t, 2>> get_edges(){}
+    virtual void set_kernel_std(AScalar std){}
 
     virtual Matrix3a findBestStressTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}
     virtual Matrix3a findBestStrainTensorviaProbing(const Vector3a sample_loc, const std::vector<Vector3a> line_directions){}

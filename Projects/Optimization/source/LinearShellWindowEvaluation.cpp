@@ -138,37 +138,79 @@ AScalar LinearShell::computeWindowArea(const Vector2a max_corner, const Vector2a
 
 Matrix3a LinearShell::findStressTensorinWindow(const Vector2a max_corner, const Vector2a min_corner){
     Matrix2a stress_tensor = Matrix2a::Zero();
+    AScalar total_area = 0;
+
+    eval_info_of_sample.stress_gradients_wrt_parameter.resize(3, faces.rows());
+    eval_info_of_sample.stress_gradients_wrt_x.resize(3, deformed_states.rows());
+    eval_info_of_sample.stress_gradients_wrt_parameter.setZero();
+    eval_info_of_sample.stress_gradients_wrt_x.setZero();
+
     for(int i = 0; i < faces.rows(); ++i){
         AScalar area = computeTriangleAreaInWindow(max_corner, min_corner, i);
-        if(area > 1e-9){
+        // if(area > 1e-9){
             stress_tensor += stress_tensors_each_element[i] * area;
+            total_area += area;
+        // }
+        eval_info_of_sample.stress_gradients_wrt_parameter.col(i) = Vector3a({stress_tensors_each_element[i](0,0), stress_tensors_each_element[i](1,1), stress_tensors_each_element[i](1,0)})/youngsmodulus_each_element[i] * area;
+        Eigen::Vector3i indices = faces.row(i);
+        std::vector<Matrix2a> dSdxs = SGradientWrtx(i);
+        for(int l = 0; l < dSdxs.size()/3; ++l){
+            for(int k = 0; k < 2; ++k){
+                Matrix2a dSdx = dSdxs[3*l+k] * area;
+                eval_info_of_sample.stress_gradients_wrt_x.col(indices(l)*3+k) += Vector3a({dSdx(0,0), dSdx(1,1), dSdx(1,0)});
+            }
         }
+
     }
-    stress_tensor /= computeWindowArea(max_corner, min_corner);
+    for(int i = 0; i < faces.rows(); i++){
+        eval_info_of_sample.stress_gradients_wrt_parameter.col(i) /= total_area;
+    }
+    for(int i = 0; i < deformed_states.rows(); i++){
+        eval_info_of_sample.stress_gradients_wrt_x.col(i) /= total_area;
+    }
+
+    stress_tensor /= total_area;
     Matrix3a stress_tensor_3d;
     stress_tensor_3d << stress_tensor(0,0), stress_tensor(0,1), 0,
                         stress_tensor(1,0), stress_tensor(1,1), 0,
                         0, 0, 0;
+    eval_info_of_sample.stress_tensor = stress_tensor_3d;
+
     return stress_tensor_3d;
 }
 
 Matrix3a LinearShell::findStrainTensorinWindow(const Vector2a max_corner, const Vector2a min_corner){
     Matrix2a strain_tensor = Matrix2a::Zero();
     AScalar total_area = 0;
+
+    eval_info_of_sample.strain_gradients_wrt_x.resize(3, deformed_states.rows());
+    eval_info_of_sample.strain_gradients_wrt_x.setZero();
+
     for(int i = 0; i < faces.rows(); ++i){
         AScalar area = computeTriangleAreaInWindow(max_corner, min_corner, i);
-        if(area > 1e-9){
+        // if(area > 1e-9){
             strain_tensor += strain_tensors_each_element[i] * area;
             total_area += area;
+        // }
+        Eigen::Vector3i indices = faces.row(i);
+        std::vector<Matrix2a> dGSdxs = GSGradientWrtx(i);
+        for(int l = 0; l < dGSdxs.size()/3; ++l){
+            for(int k = 0; k < 2; ++k){
+                Matrix2a dGSdx = dGSdxs[3*l+k] * area;
+                eval_info_of_sample.strain_gradients_wrt_x.col(indices(l)*3+k) += Vector3a({dGSdx(0,0), dGSdx(1,1), 2*dGSdx(1,0)});
+            }
         }
     }
-    // std::cout << "total area: " << total_area << std::endl;
-    // std::cout << "window area: " << computeWindowArea(max_corner, min_corner) << std::endl;
-    strain_tensor /= computeWindowArea(max_corner, min_corner);
+    strain_tensor /= total_area;
+    for(int i = 0; i < deformed_states.rows(); i++){
+        eval_info_of_sample.strain_gradients_wrt_x.col(i) /= total_area;
+    }
+    // std::cout << "strain tensor: " << strain_tensor << std::endl;
     Matrix3a strain_tensor_3d;
     strain_tensor_3d << strain_tensor(0,0), strain_tensor(0,1), 0,
                         strain_tensor(1,0), strain_tensor(1,1), 0,
                         0, 0, 0;
+    eval_info_of_sample.strain_tensor = strain_tensor_3d;
     return strain_tensor_3d;
 }
 

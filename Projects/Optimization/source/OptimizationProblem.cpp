@@ -203,7 +203,7 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 8e-1;
+	options.initial_step_size = 0.5;
 	options.tolerance = 5e-4;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
@@ -344,6 +344,7 @@ void OptimizationProblemCostFunction::UpdateSensitivities(){
 	{
 		dfdx_sim += data->objective_energies[i]->Compute_dfdx_sim(data->scene);
 		dfdp += data->objective_energies[i]->Compute_dfdp(data->scene) * data->weights_p;
+		// std::cout << data->objective_energies[i]->Compute_dfdp(data->scene).norm() << " dfdp norm " << std::endl;
 		for(int j=0; j< data->scene->num_test; ++j){
 			d2fdx2_sim[j] += data->objective_energies[i]->Compute_d2fdx2(data->scene)[j];
 			d2fdxp_sim[j] += data->objective_energies[i]->Compute_d2fdxp(data->scene)[j] * data->weights_p;
@@ -459,7 +460,7 @@ cost_evaluation OptimizationProblemCostFunction::Evaluate(const VectorXa& parame
 
 	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
 	data->scene->parameters = data->full_p;
-	// data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);
@@ -867,7 +868,7 @@ cost_evaluation OptimizationProblemCostFunctionFD::Evaluate(const VectorXa& para
 
 	std::cout << "---------------------------- SIMULATION ----------------------------" << std::endl;
 	data->scene->parameters = data->full_p;
-	// data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
+	data->scene->parameters = data->scene->parameters.cwiseMax(data->cut_lower_bound);
 	for(int i=0; i<data->objective_energies.size(); ++i)
 	{
 		data->objective_energies[i]->SimulateAndCollect(data->scene);
