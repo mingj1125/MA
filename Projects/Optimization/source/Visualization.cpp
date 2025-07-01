@@ -44,10 +44,36 @@ void Visualization::initializeScene(bool network){
         psMesh->setSurfaceColor(glm::vec3(0.255, 0.514, 0.996));
         psMesh->setEdgeWidth(1.0);
     }
+    std::vector<Vector3a> points = setRegularSampleLocations(15);
+
+    // std::string mesh_name_s = "grid_double_refined";
+    // std::string mesh_file_s = "../../../Projects/Optimization/data/"+mesh_name_s+".obj";
+    // std::vector<Vector3a> points = setMeshSampleLocations(mesh_file_s);
+
+    // std::vector<Vector3a> points = setMeshSampleLocations(scene->mesh_file);
+
+    // std::random_device rd;
+    // std::mt19937 gen(rd());
+    // std::normal_distribution<AScalar> dist(0.0, 0.02); // Mean 0, standard deviation 0.01
+
+    // for (auto& point : points) {
+    //     point(0) += dist(gen); // Add noise to x coordinate
+    //     point(1) += dist(gen); // Add noise to y coordinate
+    // }
+
+    probes = polyscope::registerPointCloud("sample locations", points);
+    sample_loc = points;     
+
+    probes->setPointRadius(0.007);
+    
+    polyscope::state::userCallback = [&](){ sceneCallback(); };
+}
+
+std::vector<Vector3a> Visualization::setRegularSampleLocations(int density, int to_boundary, bool random){
     Vector3a top_right({1,1,0});
     Vector3a bottom_left({0,0,0});
-    sample_density = 15;
-    to_boundary_width = 1;
+    sample_density = density;
+    to_boundary_width = to_boundary;
     Vector3a start = bottom_left + (top_right-bottom_left)/sample_density;
     std::vector<Vector3a> points((sample_density-1-2*to_boundary_width)*(sample_density-1-2*to_boundary_width), Vector3a::Zero());
     for(int i = to_boundary_width; i < sample_density-1-to_boundary_width; i++){
@@ -56,15 +82,41 @@ void Visualization::initializeScene(bool network){
             int p_j = j-to_boundary_width;
             points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j) = start;
             points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(0) += (top_right-bottom_left)(0)/sample_density*j;
-            points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(1) += (top_right-bottom_left)(1)/sample_density*i;
+            points.at(p_i*(sample_density-1-2*to_boundary_width)+p_j)(1) += (top_right-bottom_left)(1)/sample_density*i;// + 0.01;
         }
     }
-    probes = polyscope::registerPointCloud("sample locations", points);
-    sample_loc = points;     
+    if(random){
+        std::random_device rd;
+        std::mt19937 gen(rd(40));
+        std::normal_distribution<AScalar> dist(0.0, 0.02); // Mean 0, standard deviation 0.01
 
-    probes->setPointRadius(0.007);
-    
-    polyscope::state::userCallback = [&](){ sceneCallback(); };
+        for (auto& point : points) {
+            point(0) += dist(gen); // Add noise to x coordinate
+            point(1) += dist(gen); // Add noise to y coordinate
+        }
+    }
+    return points;
+}
+
+std::vector<Vector3a> Visualization::setMeshSampleLocations(std::string mesh_file_s){
+
+    Eigen::MatrixXd meshV_s;
+    Eigen::MatrixXi meshF_s;
+    igl::readOBJ(mesh_file_s, meshV_s, meshF_s);
+    Vector3a min_corner = meshV_s.colwise().minCoeff();
+    Vector3a max_corner = meshV_s.colwise().maxCoeff();
+    AScalar length = max_corner(0)-min_corner(0);
+    meshV_s.rowwise() -= min_corner.transpose();
+    meshV_s /= length;
+
+    std::vector<Vector3a> points(meshF_s.rows(), Vector3a::Zero());
+    for(int i = 0; i < meshF_s.rows(); ++i){
+        Vector3a X0 = meshV_s.row(meshF_s(i, 0));
+        Vector3a X1 = meshV_s.row(meshF_s(i, 1));
+        Vector3a X2 = meshV_s.row(meshF_s(i, 2));
+        points[i] = (X0 + X1 + X2) / 3.0; // Center of Mass (CoM) of the face
+    }
+    return points;
 }
 
 void Visualization::sceneCallback(){
@@ -131,7 +183,7 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("stress xy", stress_xy);
         probes->addScalarQuantity("stress yy", stress_yy);
 
-        std::string stress_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_stress_kernel.dat";
+        std::string stress_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_stress_kernel_size_"+ std::to_string(kernel_std)+ ".dat";
         std::ofstream stress_file(stress_filename);
         if (!stress_file.is_open()) {
             std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
@@ -168,7 +220,7 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("strain xy", strain_xy);
         probes->addScalarQuantity("strain yy", strain_yy);
 
-        std::string strain_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_strain_kernel.dat";
+        std::string strain_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_strain_kernel_size_" + std::to_string(kernel_std) +".dat";
         std::ofstream strain_file(strain_filename);
         if (!strain_file.is_open()) {
             std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
@@ -204,7 +256,7 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("window strain xy", strain_xy);
         probes->addScalarQuantity("window strain yy", strain_yy);
 
-        std::string strain_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_strain_window.dat";
+        std::string strain_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_strain_window_size_" + std::to_string(length) +".dat";
         std::ofstream strain_file(strain_filename);
         if (!strain_file.is_open()) {
             std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
@@ -238,7 +290,7 @@ void Visualization::sceneCallback(){
         probes->addScalarQuantity("window stress xy", stress_xy);
         probes->addScalarQuantity("window stress yy", stress_yy);
 
-        std::string stress_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_stress_window.dat";
+        std::string stress_filename = "../../../Projects/Optimization/evaluation_output/"+scene->mesh_name + "_stress_window_size_"+ std::to_string(length) +".dat";
         std::ofstream stress_file(stress_filename);
         if (!stress_file.is_open()) {
             std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
@@ -257,7 +309,7 @@ void Visualization::sceneCallback(){
     ImGui::SameLine();
     if(ImGui::Checkbox("Predefined mesh group", &tag)) pressed = true;
     ImGui::SetNextItemWidth(90);
-    if(ImGui::InputInt("GD/SGN/FD/WindowGD/FD", &gradient_descent)) pressed = true;
+    if(ImGui::InputInt("GaussianFD/OFF//WindowFD/OFF", &gradient_descent)) pressed = true;
     ImGui::SetNextItemWidth(90);
     if(ImGui::InputInt("Stretch x/y/d/sy/sx", &stretch_type)) pressed = true;
     if (pressed) 
@@ -272,11 +324,10 @@ void Visualization::sceneCallback(){
                 else if(gradient_descent == 4) filename= "../../../Projects/Optimization/optimization_output/window_"+scene->mesh_name+"_gd_params.dat";
                 else if(gradient_descent == 5) filename= "../../../Projects/Optimization/optimization_output/window_"+scene->mesh_name+"_fd_params.dat";
             } else {
-                if(gradient_descent == 1) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_gd_params.dat";
-                else if(gradient_descent == 2) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_sgn_params.dat";
-                else if(gradient_descent == 3) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_fd_params.dat";
-                else if(gradient_descent == 4) filename= "../../../Projects/Optimization/optimization_output/shell_window_"+scene->mesh_name+"_gd_params.dat";
-                else if(gradient_descent == 5) filename= "../../../Projects/Optimization/optimization_output/shell_window_"+scene->mesh_name+"_fd_params.dat";
+                if(gradient_descent == 1) filename= "../../../Projects/Optimization/optimization_output/shell_"+scene->mesh_name+"_fd_params.dat";
+                else if(gradient_descent == 2) filename= "../../../Projects/Optimization/optimization_output/shell_off_"+scene->mesh_name+"_fd_params.dat";
+                else if(gradient_descent == 3) filename= "../../../Projects/Optimization/optimization_output/shell_window_"+scene->mesh_name+"_fd_params.dat";
+                else if(gradient_descent == 4) filename= "../../../Projects/Optimization/optimization_output/shell_window_off_"+scene->mesh_name+"_fd_params.dat";
             }
             std::ifstream in_file(filename);
             if (!in_file) {
@@ -338,11 +389,51 @@ void Visualization::sceneCallback(){
         for(int l = 0; l < sample_loc.size(); ++l){
             Cs[l] = scene->sample_Cs_info[l].C_entry;
         }
+
+        std::string C_filename = "../../../Projects/Optimization/evaluation_output/" + scene->mesh_name + "_C_kernel_std_" + std::to_string(kernel_std) + ".dat";
+        std::ofstream strain_file(C_filename);
+        if (!strain_file.is_open()) {
+            std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
+        } else {
+            strain_file << "X Y Z C11 C12 C13 C22 C23 C33\n"; // Header row
+            for (int i = 0; i < sample_loc.size(); ++i) {
+                strain_file << sample_loc[i].transpose() << " " << scene->sample_Cs_info[i].C_entry.transpose() << "\n";
+            }
+            strain_file.close();
+        }
     }
     ImGui::SetNextItemWidth(60);
     if(ImGui::DragFloat("Window length", &length)){}
     ImGui::SetNextItemWidth(60);
-    if(ImGui::DragFloat("Kernel std", &kernel_std)){scene->setKernelStd(kernel_std);}
+    if(ImGui::DragFloat("Kernel std", &kernel_std)){
+        scene->setKernelStd(kernel_std);
+        auto gaussian_kernel = [=](AScalar distance){
+            return std::exp(-0.5*distance*distance/(kernel_std*kernel_std)) / (kernel_std * std::sqrt(2 * M_PI));
+        };
+        VectorXa weights(meshF.rows());
+        AScalar sum = 0;
+        for(int i = 0; i < meshF.rows(); i++){
+            Matrix3a undeformed_vertices;
+            Eigen::Vector<int, 3> nodal_indices = meshF.row(i);
+            for (int j = 0; j < 3; j++)
+            {
+                undeformed_vertices.row(j) = meshV.row(nodal_indices[j]);
+            }
+            Vector3a X0 = undeformed_vertices.row(0); 
+            Vector3a X1 = undeformed_vertices.row(1); 
+            Vector3a X2 = undeformed_vertices.row(2);
+            Vector3a center = (X0 + X1 + X2) / 3.0;
+            AScalar d = std::sqrt((center[0] - C_test_point[0]) * (center[0] - C_test_point[0]) + 
+                        (center[1] - C_test_point[1]) * (center[1] - C_test_point[1]));
+            weights[i] = gaussian_kernel(d);
+            sum += gaussian_kernel(d);
+        }
+        weights /= sum;
+        if(!network_visual){
+            psMesh->addFaceScalarQuantity("kernel weights", weights);
+        }
+        
+    }
     if(ImGui::Checkbox("Show Window", &show_window)){} 
     ImGui::SameLine();
     if(ImGui::Button("Calculate Window C")) {
@@ -365,6 +456,18 @@ void Visualization::sceneCallback(){
         for(int l = 0; l < sample_loc.size(); ++l){
             window_Cs[l] = scene->window_Cs_info[l].C_entry;
         }
+
+        std::string C_filename = "../../../Projects/Optimization/evaluation_output/" + scene->mesh_name + "_C_window_size_" + std::to_string(length) + ".dat";
+        std::ofstream strain_file(C_filename);
+        if (!strain_file.is_open()) {
+            std::cerr << "Error: Could not open file for writing stresses!" << std::endl;
+        } else {
+            strain_file << "X Y Z C11 C12 C13 C22 C23 C33\n"; // Header row
+            for (int i = 0; i < sample_loc.size(); ++i) {
+                strain_file << sample_loc[i].transpose() << " " << scene->window_Cs_info[i].C_entry.transpose() << "\n";
+            }
+            strain_file.close();
+        }
     }
     if (show_window) {
         Vector2a s = {C_test_point[0], C_test_point[1]};
@@ -379,9 +482,8 @@ void Visualization::sceneCallback(){
         std::vector<std::array<size_t, 2>> window_edges = {
         {0, 1}, {1, 2}, {2, 3}, {3, 0}
         };
-        polyscope::registerCurveNetwork("Window", window_corners, window_edges)
-        ->setColor(glm::vec3(1.0, 0.0, 0.0))
-        ->setRadius(0.005);
+        polyscope::registerCurveNetwork("Window", window_corners, window_edges);
+        // ->setRadius(0.005); //color: #1C4CE3
     } else{
         polyscope::removeCurveNetwork("Window");
     }

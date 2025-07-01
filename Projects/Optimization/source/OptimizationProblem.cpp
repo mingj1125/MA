@@ -269,7 +269,7 @@ bool OptimizationProblem::OptimizeFD()
 	damped_newton_options options;
 	options.solver_type = DN_SOLVER_LU;
 	options.damping = 5;
-	options.global_stopping_criteria = 5e-4;
+	options.global_stopping_criteria = 5e-5;
 	options.change_stopping_criteria = 1e-9;
 	options.damp_matrix = damp_matrix;
 	options.max_iterations = 300;

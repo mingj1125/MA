@@ -57,6 +57,8 @@ public:
         polyscope::show();
     }
     void updateCurrentVertex();
+    std::vector<Vector3a> setRegularSampleLocations(int density, int to_boundary = 1, bool random = false);
+    std::vector<Vector3a> setMeshSampleLocations(std::string mesh_file_s);
     Vector3a pointInDeformedTriangle(const Vector3a sample_loc);
     Eigen::VectorXi readTag(const std::string tag_file); 
     VectorXa setParameterFromTags(Eigen::VectorXi tags);

@@ -11,3 +11,4 @@ cmake-build-release/*
 CMakeLists*
 Projects/*/CMakeLists*
 Projects/*/optimization_output/*
+Projects/*/evaluation_output/*
