@@ -78,6 +78,10 @@ public:
     Matrix3a returnWindowStressInCurrentSimulation(Vector2a max_corner, Vector2a min_corner);
     Matrix3a returnWindowStrainInCurrentSimulation(Vector2a max_corner, Vector2a min_corner);
 
+    // -------------------------------- Strain Evaluation -------------------------------
+    std::vector<MatrixXa> getStrainInfo(std::vector<Vector3a> sample_locs, 
+        const std::vector<Vector3a> line_directions);
+    std::vector<MatrixXa> getStrainInfoWindow(std::vector<Vector4a> corners);
 };
 
 #endif

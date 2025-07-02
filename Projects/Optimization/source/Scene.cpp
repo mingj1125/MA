@@ -45,7 +45,7 @@ struct stress_strain_relationship{
 
 void Scene::findBestCTensorviaProbing(std::vector<Vector3a> sample_locs, 
     const std::vector<Vector3a> line_directions, bool opt){
-        
+    num_test = 3;
     std::vector<stress_strain_relationship> samples(sample_locs.size(), stress_strain_relationship(parameters.rows(), num_test, sim.get_deformed_nodes().rows()));
     sample_Cs_info = std::vector<C_info>(sample_locs.size(), C_info(sim.get_deformed_nodes().rows(), parameter_dof())); 
     for(int i = 1; i <= num_test; ++i){
@@ -307,4 +307,51 @@ Matrix3a Scene::returnWindowStressInCurrentSimulation(Vector2a max_corner, Vecto
 
 Matrix3a Scene::returnWindowStrainInCurrentSimulation(Vector2a max_corner, Vector2a min_corner){
     return sim.findStrainTensorinWindow(max_corner, min_corner);
+}
+
+std::vector<MatrixXa> Scene::getStrainInfo(std::vector<Vector3a> sample_locs, 
+    const std::vector<Vector3a> line_directions){
+        num_test = 1;
+        sim.applyBoundaryStretch(2, 1.1);
+        sim.setOptimizationParameter(parameters);
+        sim.Simulate(false);
+        constraint_sims[0] = sim.get_constraint_map();
+        Eigen::SparseMatrix<AScalar> K;
+        sim.build_sim_hessian(K);
+        hessian_sims[0] = K;
+        Eigen::SparseMatrix<AScalar> K_p;
+        sim.build_d2Edxp(K_p);
+        hessian_p_sims[0] = K_p;
+        std::vector<MatrixXa> info(sample_locs.size(), MatrixXa::Zero(3, x_dof()+1));
+        for(int l = 0; l < sample_locs.size(); ++l){
+            Matrix3a E = sim.findBestStrainTensorviaProbing(sample_locs[l], line_directions); // 3*1
+            info[l].col(0) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
+            info[l].block(0,1,3,x_dof()) = sim.getStrainGradientWrtx();
+        }
+
+        return info;
+}
+
+std::vector<MatrixXa> Scene::getStrainInfoWindow(std::vector<Vector4a> corners){
+        num_test = 1;
+        sim.applyBoundaryStretch(2, 1.1);
+        sim.setOptimizationParameter(parameters);
+        sim.Simulate(false);
+        constraint_sims[0] = sim.get_constraint_map();
+        Eigen::SparseMatrix<AScalar> K;
+        sim.build_sim_hessian(K);
+        hessian_sims[0] = K;
+        Eigen::SparseMatrix<AScalar> K_p;
+        sim.build_d2Edxp(K_p);
+        hessian_p_sims[0] = K_p;
+        std::vector<MatrixXa> info(corners.size(), MatrixXa::Zero(3, x_dof()+1));
+        for(int l = 0; l < corners.size(); ++l){
+            Vector2a max_corner = corners[l].segment(0,2);
+            Vector2a min_corner = corners[l].segment(2,2);
+            Matrix3a E = sim.findStrainTensorinWindow(max_corner, min_corner);
+            info[l].col(0) = Vector3a({E(0,0), E(1,1), 2*E(1,0)});
+            info[l].block(0,1,3,x_dof()) = sim.getStrainGradientWrtx();
+        }
+
+        return info;
 }

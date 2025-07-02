@@ -203,7 +203,7 @@ bool OptimizationProblem::OptimizeGD()
 
 	OptimizationProblemCostFunctionCeres cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 0.5;
+	options.initial_step_size = 1e-4;
 	options.tolerance = 5e-4;
 	options.output_file = output_loc + "_gd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionCeres>(options, cost_function, parameters);
@@ -232,7 +232,7 @@ bool OptimizationProblem::OptimizeGDFD()
 
 	OptimizationProblemCostFunctionFD cost_function(this);
 	GradientDescentOptions options;
-	options.initial_step_size = 1e1;
+	options.initial_step_size = 1e-5;
 	options.tolerance = 5e-4;
 	options.output_file = output_loc + "_gd_fd.log";
 	auto summary = GradientDescent<OptimizationProblemCostFunctionFD>(options, cost_function, parameters);
@@ -504,7 +504,7 @@ void OptimizationProblem::TestOptimizationGradient(){
 	VectorXa parameters(x.rows()*2*scene->num_test + p.rows());
 	parameters.setZero();
 
-	OptimizationProblemCostFunction cost_function(this);
+	OptimizationProblemCostFunctionFD cost_function(this);
 
 	std::cout << std::endl << std::endl;
 	std::cout << "<---------------------------------- TESTING GRADIENT ----------------------------------> " << std::endl;

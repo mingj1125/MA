@@ -44,22 +44,14 @@ void Visualization::initializeScene(bool network){
         psMesh->setSurfaceColor(glm::vec3(0.255, 0.514, 0.996));
         psMesh->setEdgeWidth(1.0);
     }
-    std::vector<Vector3a> points = setRegularSampleLocations(15);
+    bool random = true;
+    std::vector<Vector3a> points = setRegularSampleLocations(15, 1, random);
 
     // std::string mesh_name_s = "grid_double_refined";
     // std::string mesh_file_s = "../../../Projects/Optimization/data/"+mesh_name_s+".obj";
     // std::vector<Vector3a> points = setMeshSampleLocations(mesh_file_s);
 
     // std::vector<Vector3a> points = setMeshSampleLocations(scene->mesh_file);
-
-    // std::random_device rd;
-    // std::mt19937 gen(rd());
-    // std::normal_distribution<AScalar> dist(0.0, 0.02); // Mean 0, standard deviation 0.01
-
-    // for (auto& point : points) {
-    //     point(0) += dist(gen); // Add noise to x coordinate
-    //     point(1) += dist(gen); // Add noise to y coordinate
-    // }
 
     probes = polyscope::registerPointCloud("sample locations", points);
     sample_loc = points;     
@@ -87,8 +79,8 @@ std::vector<Vector3a> Visualization::setRegularSampleLocations(int density, int 
     }
     if(random){
         std::random_device rd;
-        std::mt19937 gen(rd(40));
-        std::normal_distribution<AScalar> dist(0.0, 0.02); // Mean 0, standard deviation 0.01
+        std::mt19937 gen{rd()};
+        std::normal_distribution<AScalar> dist(0.0, 0.02); // Mean 0, standard deviation 0.02
 
         for (auto& point : points) {
             point(0) += dist(gen); // Add noise to x coordinate
@@ -232,6 +224,21 @@ void Visualization::sceneCallback(){
             }
             strain_file.close();
         }
+
+        // derive a linear strain field according to the current strain
+        AScalar strain_xx_mean = std::accumulate(strain_xx.begin(), strain_xx.end(), 0.0) / strain_xx.size();
+        AScalar strain_xy_mean = std::accumulate(strain_xy.begin(), strain_xy.end(), 0.0) / strain_xy.size();
+        AScalar strain_yy_mean = std::accumulate(strain_yy.begin(), strain_yy.end(), 0.0) / strain_yy.size();
+        Es.resize(sample_loc.size());
+        for(int i = 0; i < sample_loc.size(); ++i){
+            Vector3a sample_location = sample_loc.at(i);
+            Es.at(i) = Vector3a(
+                strain_xx_mean ,
+                strain_yy_mean + (sample_location(1)-0.5)*(1-0.7)*2*strain_yy_mean,
+                0.0
+            );
+            // std::cout << "strain: " << Es.at(i).transpose() << std::endl;
+        }
     }
     ImGui::Text("Window:");
     ImGui::SameLine();
@@ -267,6 +274,21 @@ void Visualization::sceneCallback(){
                     << strain_xx.at(i) << " " << strain_xy.at(i) << " " << strain_yy.at(i) << "\n";
             }
             strain_file.close();
+        }
+
+        // derive a linear strain field according to the current strain
+        AScalar strain_xx_mean = std::accumulate(strain_xx.begin(), strain_xx.end(), 0.0) / strain_xx.size();
+        AScalar strain_xy_mean = std::accumulate(strain_xy.begin(), strain_xy.end(), 0.0) / strain_xy.size();
+        AScalar strain_yy_mean = std::accumulate(strain_yy.begin(), strain_yy.end(), 0.0) / strain_yy.size();
+        window_Es.resize(sample_loc.size());
+        for(int i = 0; i < sample_loc.size(); ++i){
+            Vector3a sample_location = sample_loc.at(i);
+            window_Es.at(i) = Vector3a(
+                strain_xx_mean ,
+                strain_yy_mean + (sample_location(1)-0.5)*(1-0.7)*2*strain_yy_mean,
+                0.0
+            );
+            // std::cout << "window strain: " << window_Es.at(i).transpose() << std::endl;
         }
     }
     ImGui::SameLine();

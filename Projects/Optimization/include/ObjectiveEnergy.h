@@ -113,4 +113,75 @@ public:
 
 };
 
+
+class ApproximateTargetStrainTensor: public ObjectiveEnergy
+{    
+public:
+
+    Vector3a consider_entry; // 1 if considered
+    std::vector<Vector3a> target_locations;
+    std::vector<Vector3a> target_strain_tensors;
+    std::vector<MatrixXa> strain_gradient_x;
+    std::vector<Vector3a> strains;
+
+    ApproximateTargetStrainTensor(std::vector<Vector3a> target_locations_m, std::vector<Vector3a> target_strain_tensors_m){
+        target_locations = target_locations_m;
+        target_strain_tensors = target_strain_tensors_m;
+        // consider_entry.setConstant(1);
+        setConsideringEntry({0, 1, 0});
+        strains.resize(target_locations.size());
+    }
+
+    void setConsideringEntry(Vector3a ce){
+        consider_entry = ce;
+    }
+
+    virtual AScalar ComputeEnergy(Scene* scene);
+    virtual VectorXa Compute_dfdp(Scene* scene){return VectorXa::Zero(scene->parameter_dof());};
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdx2(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdxp(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdp2(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+
+    virtual VectorXa Compute_dfdx_sim(Scene* scene);
+
+    virtual void SimulateAndCollect(Scene* scene);
+    virtual void OnlyCollect(Scene* scene, MatrixXa offsets){}
+
+};
+
+class ApproximateTargetStrainTensorWindow: public ObjectiveEnergy
+{    
+public:
+
+    Vector3a consider_entry; // 1 if considered
+    std::vector<Vector4a> target_corners;
+    std::vector<Vector3a> target_strain_tensors;
+    std::vector<MatrixXa> strain_gradient_x;
+    std::vector<Vector3a> strains;
+
+    ApproximateTargetStrainTensorWindow(std::vector<Vector4a> target_corners_m, std::vector<Vector3a> target_strain_tensors_m){
+        target_corners = target_corners_m;
+        target_strain_tensors = target_strain_tensors_m;
+        // consider_entry.setConstant(1);
+        setConsideringEntry({0, 1, 0});
+        strains.resize(target_corners.size());
+    }
+
+    void setConsideringEntry(Vector3a ce){
+        consider_entry = ce;
+    }
+
+    virtual AScalar ComputeEnergy(Scene* scene);
+    virtual VectorXa Compute_dfdp(Scene* scene){return VectorXa::Zero(scene->parameter_dof());};
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdx2(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdxp(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+    virtual std::vector<Eigen::SparseMatrix<AScalar>> Compute_d2fdp2(Scene* scene){return std::vector<Eigen::SparseMatrix<AScalar>>();}
+
+    virtual VectorXa Compute_dfdx_sim(Scene* scene);
+
+    virtual void SimulateAndCollect(Scene* scene);
+    virtual void OnlyCollect(Scene* scene, MatrixXa offsets){}
+
+};
+
 #endif

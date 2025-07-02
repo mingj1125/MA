@@ -44,6 +44,8 @@ private:
     float kernel_std = 0.08;
     std::vector<Vector6a> Cs;
     std::vector<Vector6a> window_Cs;
+    std::vector<Vector3a> Es;
+    std::vector<Vector3a> window_Es;
 
     polyscope::SurfaceMesh* psMesh;
 
@@ -64,7 +66,9 @@ public:
     VectorXa setParameterFromTags(Eigen::VectorXi tags);
     std::vector<Vector3a> getSampleLocations(){return sample_loc;};
     std::vector<Vector6a> getCs(){return Cs;};
+    std::vector<Vector3a> getEs(){return Es;};
     std::vector<Vector6a> getWindowCs(){return window_Cs;};
+    std::vector<Vector3a> getWindowEs(){return window_Es;};
     std::vector<Vector4a> getWindowCorners(){
         std::vector<Vector4a> corners(sample_loc.size(), Vector4a::Zero());
         for(int i = 0; i < sample_loc.size(); ++i){

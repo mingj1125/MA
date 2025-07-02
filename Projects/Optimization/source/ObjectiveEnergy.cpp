@@ -538,3 +538,120 @@ void ApproximateTargetStiffnessTensorWindow::SimulateAndCollect(Scene* scene){
 
     scene->findCTensorInWindow(target_corners, true);
 }
+
+void ApproximateTargetStrainTensor::SimulateAndCollect(Scene* scene){
+
+    std::vector<Vector3a> directions;
+    for(int i = 0; i < scene->num_directions; ++i) {
+        AScalar angle = i*2*M_PI/scene->num_directions; 
+        directions.push_back(Vector3a{std::cos(angle), std::sin(angle), 0});
+    }
+    std::vector<MatrixXa> info = scene->getStrainInfo(target_locations, directions);
+    strain_gradient_x = std::vector<MatrixXa>(target_locations.size(), MatrixXa::Zero(3, scene->x_dof()));
+    for(int i = 0; i < target_locations.size(); ++i){
+        strains[i] = info[i].col(0);
+        strain_gradient_x[i] = info[i].block(0,1,3,scene->x_dof());
+    }
+}
+
+AScalar ApproximateTargetStrainTensor::ComputeEnergy(Scene* scene){
+
+    AScalar energy = 0;
+    for(int k = 0; k < target_locations.size(); ++k){
+        Vector3a target_E = target_strain_tensors[k];
+        Vector3a strain = strains[k];
+        for(int j = 0; j < 3; ++j){
+
+            energy += consider_entry(j)*0.5*(strain(j) - target_E(j))*(strain(j) - target_E(j))*1e4;
+
+        }
+       
+    }    
+    return energy/target_locations.size();
+}
+
+VectorXa ApproximateTargetStrainTensor::Compute_dfdx_sim(Scene* scene){
+
+    VectorXa gradient_wrt_x(scene->x_dof()*scene->num_test); gradient_wrt_x.setZero();
+
+    for(int test = 0; test < scene->num_test; ++test){
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+        for(int k = 0; k < target_locations.size(); ++k){
+            Vector3a target_E = target_strain_tensors[k];
+            Vector3a strain = strains[k];
+            for(int i = 0; i < scene->x_dof(); ++i){
+                if(constrained[i]) continue;
+    
+                AScalar g = 0;
+                for(int j = 0; j < 3; ++j){
+    
+                    g += consider_entry(j)*(strain(j) - target_E(j))*1e4*strain_gradient_x[k](j, i);
+    
+                }
+                gradient_wrt_x(scene->x_dof()*test+ i) += g;
+            }
+        }
+    }
+    
+    return gradient_wrt_x/target_locations.size();
+}
+
+void ApproximateTargetStrainTensorWindow::SimulateAndCollect(Scene* scene){
+
+    std::vector<MatrixXa> info = scene->getStrainInfoWindow(target_corners);
+    strain_gradient_x = std::vector<MatrixXa>(target_corners.size(), MatrixXa::Zero(3, scene->x_dof()));
+    for(int i = 0; i < target_corners.size(); ++i){
+        strains[i] = info[i].col(0);
+        strain_gradient_x[i] = info[i].block(0,1,3,scene->x_dof());
+    }
+}
+
+AScalar ApproximateTargetStrainTensorWindow::ComputeEnergy(Scene* scene){
+
+    AScalar energy = 0;
+    for(int k = 0; k < target_corners.size(); ++k){
+        Vector3a target_E = target_strain_tensors[k];
+        Vector3a strain = strains[k];
+        for(int j = 0; j < 3; ++j){
+
+            energy += consider_entry(j)*0.5*(strain(j) - target_E(j))*(strain(j) - target_E(j))*1e4;
+
+        }
+       
+    }    
+    return energy/target_corners.size();
+}
+
+VectorXa ApproximateTargetStrainTensorWindow::Compute_dfdx_sim(Scene* scene){
+
+    VectorXa gradient_wrt_x(scene->x_dof()*scene->num_test); gradient_wrt_x.setZero();
+
+    for(int test = 0; test < scene->num_test; ++test){
+        std::vector<bool> constrained(scene->x_dof());
+        std::vector<int> constraints = scene->get_constraint_sim(test);
+        for(int j = 0; j < constraints.size(); ++j){
+            constrained[constraints[j]] = true;
+        }
+        for(int k = 0; k < target_corners.size(); ++k){
+            Vector3a target_E = target_strain_tensors[k];
+            Vector3a strain = strains[k];
+            for(int i = 0; i < scene->x_dof(); ++i){
+                if(constrained[i]) continue;
+    
+                AScalar g = 0;
+                for(int j = 0; j < 3; ++j){
+    
+                    g += consider_entry(j)*(strain(j) - target_E(j))*1e4*strain_gradient_x[k](j, i);
+    
+                }
+                gradient_wrt_x(scene->x_dof()*test+ i) += g;
+            }
+        }
+    }
+    
+    return gradient_wrt_x/target_corners.size();
+}
